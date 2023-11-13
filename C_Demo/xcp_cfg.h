@@ -60,7 +60,7 @@
 /*----------------------------------------------------------------------------*/
 /* DAQ features and parameters */
 
-// #define XCP_ENABLE_DAQ_EVENT_INFO // Enable XCP_GET_EVENT_INFO, if this is enabled, A2L file event information will be ignored
+#define XCP_ENABLE_DAQ_EVENT_INFO // Enable XCP_GET_EVENT_INFO, if this is enabled, A2L file event information will be ignored
 
 #define XCP_ENABLE_DAQ_EVENT_LIST // Enable event list
 #define XCP_MAX_EVENT 16 // Maximum number of events, size of event table
