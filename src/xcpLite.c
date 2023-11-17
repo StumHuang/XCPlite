@@ -1050,6 +1050,12 @@ void XcpCommand( const uint32_t* cmdData, uint16_t cmdLen )
               CRM_GET_CAL_PAGE_PAGE = ApplXcpGetCalPage(CRO_GET_CAL_PAGE_SEGMENT, CRO_GET_CAL_PAGE_MODE);
           }
           break;
+
+          case CC_COPY_CAL_PAGE:
+          {
+              //gXcp.CrmLen = CRM_COPY_CAL_PAGE_LEN;
+          }
+          break;
 #endif
 
 
@@ -1713,6 +1719,10 @@ static void XcpPrintCmd() {
     case CC_GET_CAL_PAGE:
         printf("GET_CAL_PAGE segment=%u, mode=%u\n", CRO_GET_CAL_PAGE_SEGMENT, CRO_GET_CAL_PAGE_MODE);
         break;
+
+    case CC_COPY_CAL_PAGE:
+      printf("COPY_CAL_PAGE SRC_SEGMENT=%u, SRC_PAG=%u, DEST_SEGMENT=%u, DEST_PAGE=%u\n", CRO_COPY_CAL_PAGE_SRC_SEGMENT, CRO_COPY_CAL_PAGE_SRC_PAGE,CRO_COPY_CAL_PAGE_DEST_SEGMENT,CRO_COPY_CAL_PAGE_DEST_PAGE);
+      break;
 #endif
 
 #ifdef XCP_ENABLE_CHECKSUM
