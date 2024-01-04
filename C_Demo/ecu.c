@@ -23,7 +23,7 @@
 /**************************************************************************/
 
 // Event
-uint16_t gXcpEvent_EcuCyclic = 0; // XCP event number
+uint16_t XcpEvent_2ms = 0; // XCP event number
 
 // Global measurement variables
 double ecuTime = 0;
@@ -147,7 +147,7 @@ void ecuInit() {
     for (unsigned int i = 0; i < 1024; i++) longArray1[i] = i;
 
     // Create an XCP event for the cyclic task
-    gXcpEvent_EcuCyclic = XcpCreateEvent("ecuTask", 2*CLOCK_TICKS_PER_MS, 0, 0, 0);
+    XcpEvent_2ms = XcpCreateEvent("Task2ms", 2*CLOCK_TICKS_PER_MS, 0, 0, 0);
 }
 
 
@@ -175,13 +175,14 @@ void ecuCreateA2lDescription() {
         "ecuPar.period", "ecuPar.ampl", "ecuPar.phase", "ecuPar.offset" );
 
     // Measurements
-    A2lSetEvent(gXcpEvent_EcuCyclic); // Associate XCP event "EcuCyclic" to the variables created below
+    A2lSetEvent(XcpEvent_2ms); // Associate XCP event "EcuCyclic" to the variables created below
     A2lCreateMeasurement(byteCounter, A2L_TYPE_UINT8, "");
     A2lCreateMeasurement(wordCounter, A2L_TYPE_UINT16, "");
     A2lCreateMeasurement(dwordCounter, A2L_TYPE_UINT32, "");
     A2lCreateMeasurement(sbyteCounter, A2L_TYPE_INT8, "");
     A2lCreateMeasurement(swordCounter, A2L_TYPE_INT16, "");
     A2lCreateMeasurement(sdwordCounter, A2L_TYPE_INT32, "");
+    A2lCreateMeasurement(ecuTime, A2L_TYPE_DOUBLE, "");
     A2lCreatePhysMeasurement(channel1, A2L_TYPE_DOUBLE, "Sinus signal 1", 1.0, 0.0, "");
     A2lCreatePhysMeasurement(channel2, A2L_TYPE_DOUBLE, "Sinus signal 2", 1.0, 0.0, "");
     A2lCreatePhysMeasurement(channel3, A2L_TYPE_DOUBLE, "Sinus signal 3", 1.0, 0.0, "");
@@ -217,21 +218,34 @@ void ecuCyclic( void )
     channel3 = ecuCalPage->offset + ecuCalPage->ampl * sin(x + M_PI * 2 / 3);
     ecuTime += 0.002;
 
-    XcpEvent(gXcpEvent_EcuCyclic); // Trigger XCP measurement data aquisition event 
+    XcpEvent(XcpEvent_2ms); // Trigger XCP measurement data aquisition event 
 }
 
 
 // ECU cyclic (2ms default) demo task
 #ifdef _WIN
-DWORD WINAPI ecuTask(LPVOID p)
+DWORD WINAPI Task2ms(LPVOID p)
 #else
-void* ecuTask(void* p)
+void* Task2ms(void* p)
 #endif
 {
     (void)p;
-    printf("Start C task (cycle = %dus, XCP event = %d)\n", ecuCalPage->cycleTimeUs, gXcpEvent_EcuCyclic);
+    printf("Start C task (cycle = %dus, XCP event = %d)\n", ecuCalPage->cycleTimeUs, XcpEvent_2ms);
     for (;;) {
         sleepNs(ecuCalPage->cycleTimeUs * 1000); // cycletime is a calibration parameter
         ecuCyclic();
+    }
+}
+
+#ifdef _WIN
+DWORD WINAPI Task8ms(LPVOID p)
+#else
+void* Task8ms(void* p)
+#endif
+{
+    (void)p;
+    printf("Start C task (cycle = %dms, XCP event = %d)\n", 8, XcpEvent_2ms);
+    for (;;) {
+        sleepMs(8); // cycletime is a calibration parameter
     }
 }

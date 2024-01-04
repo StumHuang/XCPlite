@@ -62,7 +62,9 @@ int main(int argc, char* argv[]) {
     createA2L();
 #endif
     tXcpThread t2;
-    create_thread(&t2, ecuTask);
+    create_thread(&t2, Task2ms);
+    tXcpThread t8;
+    create_thread(&t8, Task8ms);
 
     // Loop   
     for (;;) {
@@ -77,6 +79,7 @@ int main(int argc, char* argv[]) {
     sleepMs(1000); // give everything a chance to be up and running
     printf("\nPress ESC to stop\n");
     cancel_thread(t2);
+    cancel_thread(t8);
     
     XcpServerShutdown();
     socketCleanup();

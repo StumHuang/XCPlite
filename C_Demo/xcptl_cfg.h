@@ -12,7 +12,7 @@
  ----------------------------------------------------------------------------*/
 
 // Transport layer version
-#define XCP_TRANSPORT_LAYER_VERSION 0x0104
+#define XCP_TRANSPORT_LAYER_VERSION 0x0100
 
 // TCP or/and UDP option enabled
 #define XCPTL_ENABLE_TCP

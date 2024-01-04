@@ -14,7 +14,7 @@ set(C_Demo_WIN_SOURCES
 set_source_files_properties(${C_Demo_WIN_SOURCES} PROPERTIES LANGUAGE C)
 
 set(C_Demo_LINUX_SOURCES 
-  main.c ecu.c 
+  main.c ecu.c
   ../src/xcpAppl.c ../src/xcpLite.c ../src/xcpTl.c ../src/xcpServer.c ../src/A2L.c ../src/platform.c ../src/util.c 
 )
 set_source_files_properties(${C_Demo_LINUX_SOURCES} PROPERTIES LANGUAGE C)
@@ -31,6 +31,9 @@ set(OPTION_SERVER_XL_ADDR {192,168,0,200} CACHE STRING "")
 set(OPTION_SERVER_XL_MAC {0xdc,0xa6,0x32,0x7e,0x66,0xdc} CACHE STRING "")
 set(OPTION_SERVER_XL_NET "NET1" CACHE STRING "")
 set(OPTION_SERVER_XL_SEG "SEG1" CACHE STRING "")
+# set(CMAKE_EXE_LINKER_FLAGS "-Wl,-Map=output.map")
+SET(CMAKE_C_FLAGS_RELEASE "-gdwarf-2")
+
 
 if (WINDOWS)
 add_executable(C_Demo ${C_Demo_WIN_SOURCES})

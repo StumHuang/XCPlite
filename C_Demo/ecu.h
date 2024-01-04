@@ -17,8 +17,14 @@ extern void ecuCreateA2lDescription();
 extern char* ecuGetEPK();
 
 #ifdef _WIN
-DWORD WINAPI ecuTask(LPVOID p);
+DWORD WINAPI Task2ms(LPVOID p);
 #else
-void* ecuTask(void* p);
+void* Task2ms(void* p);
+#endif
+
+#ifdef _WIN
+DWORD WINAPI Task8ms(LPVOID p);
+#else
+void* Task8ms(void* p);
 #endif
 
