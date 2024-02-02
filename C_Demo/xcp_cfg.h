@@ -67,7 +67,7 @@
 
 //#define XCP_ENABLE_PACKED_MODE // Enable packed mode emulation
 
-#define XCP_DAQ_MEM_SIZE (5*200) // Amount of memory for DAQ tables, each ODT entry (e.g. measurement variable) needs 5 bytes
+#define XCP_DAQ_MEM_SIZE (5*200*1000) // Amount of memory for DAQ tables, each ODT entry (e.g. measurement variable) needs 5 bytes
 
 // DAQ clock info
 #ifndef CLOCK_USE_UTC_TIME_NS

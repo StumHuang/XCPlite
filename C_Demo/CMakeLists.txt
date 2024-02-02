@@ -14,12 +14,12 @@ set(C_Demo_WIN_SOURCES
 set_source_files_properties(${C_Demo_WIN_SOURCES} PROPERTIES LANGUAGE C)
 
 set(C_Demo_LINUX_SOURCES 
-  main.c ecu.c
+  main.c ecu.c xcp_test.c xcp_test_data.c
   ../src/xcpAppl.c ../src/xcpLite.c ../src/xcpTl.c ../src/xcpServer.c ../src/A2L.c ../src/platform.c ../src/util.c 
 )
 set_source_files_properties(${C_Demo_LINUX_SOURCES} PROPERTIES LANGUAGE C)
 
-set(OPTION_DEBUG_LEVEL 2 CACHE STRING "Debug output level")
+set(OPTION_DEBUG_LEVEL 5 CACHE STRING "Debug output level")
 option(OPTION_ENABLE_TCP "Enable TCP" 1)
 option(OPTION_USE_TCP "Use TCP by default" 0)
 set(OPTION_SERVER_PORT 5555 CACHE STRING "XCP default port")
@@ -31,7 +31,8 @@ set(OPTION_SERVER_XL_ADDR {192,168,0,200} CACHE STRING "")
 set(OPTION_SERVER_XL_MAC {0xdc,0xa6,0x32,0x7e,0x66,0xdc} CACHE STRING "")
 set(OPTION_SERVER_XL_NET "NET1" CACHE STRING "")
 set(OPTION_SERVER_XL_SEG "SEG1" CACHE STRING "")
-# set(CMAKE_EXE_LINKER_FLAGS "-Wl,-Map=output.map")
+set(CMAKE_BUILD_TYPE "Debug")
+set(CMAKE_EXE_LINKER_FLAGS "-Wl,-Map=output.map")
 SET(CMAKE_C_FLAGS_RELEASE "-gdwarf-2")
 
 

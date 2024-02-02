@@ -18,10 +18,6 @@
         },
         {
             "label": "make",
-            "group":{
-                "kind":"build",
-                "isDefault":true
-            },
             "type": "shell",
             "dependsOn": ["cmake"],
             "command": "echo 1234567890 | sudo -S make ",
@@ -33,12 +29,29 @@
             },
         },
         {
+            "label": "private",
+            "group":{
+                "kind":"build",
+                "isDefault":true
+            },
+            "type": "shell",
+            "dependsOn": ["cmake","make"],
+            "command": "echo 1234567890 | sudo -S chown shuang ${workspaceFolder}/build_C_Demo",
+            "args": [
+            
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/"
+            },
+        },
+        {
             "label":"Build my project",
             "dependsOn":[
                 "cmake",
-                "make"                
+                "make" ,
+                "private"               
             ]
-        }
+        },
     ]
 }
 
