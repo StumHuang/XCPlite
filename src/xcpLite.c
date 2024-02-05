@@ -854,7 +854,7 @@ void XcpCommand( const uint32_t* cmdData, uint16_t cmdLen )
   uint8_t err = 0;
 
   if (!isStarted()) return;
-  if (cmdLen >= sizeof(gXcp.Cro)) return;
+  if (cmdLen > sizeof(gXcp.Cro)) return;
   
   gXcp.CroLen = (uint8_t)cmdLen;
   memcpy(&gXcp.Cro, cmdData, cmdLen);
