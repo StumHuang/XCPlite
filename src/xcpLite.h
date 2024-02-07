@@ -4,10 +4,37 @@
 /* Copyright(c) Vector Informatik GmbH.All rights reserved.
    Licensed under the MIT license.See LICENSE file in the project root for details. */
 
-#include "xcp_cfg.h"    // Protocol layer configuration
+
+#ifdef __XCPTL_CFG_H__
+#error "Include dependency error!"
+#endif
+#ifdef __XCP_CFG_H__
+#error "Include dependency error!"
+#endif
+
+   
+// Transport layer type
+// The protocol layer implementation has some dependencies on the transport layer type
+// Some XCP commands are only supported on Ethernet and can not be compiled with MAX_CTO == 8 
+#define XCP_TRANSPORT_LAYER_ETH 1
+#define XCP_TRANSPORT_LAYER_CAN 0
+
 #include "xcptl_cfg.h"  // Transport layer configuration
+
+// Transport layer definitions and configuration
+#if XCP_TRANSPORT_LAYER_TYPE==XCP_TRANSPORT_LAYER_ETH
+#include "xcpTl.h" 
+#include "xcpEthTl.h"  // Ethernet transport layer specific functions
+#elif XCP_TRANSPORT_LAYER_TYPE==XCP_TRANSPORT_LAYER_CAN
+#include "xcptl.h" 
+#include "xcpcantl.h"  
+#else
+#error "Define XCP_TRANSPORT_LAYER_ETH or XCP_TRANSPORT_LAYER_CAN"
+#endif
+
+// Protocol layer definitions and configuration
+#include "xcp_cfg.h"    // Protocol layer configuration
 #include "xcp.h"        // XCP protocol defines
-#include "xcpTl.h"      // Transport layer interface
 
 
 
@@ -60,7 +87,7 @@ extern void XcpSendEvent(uint8_t evc, const uint8_t* d, uint8_t l);
 extern BOOL XcpIsStarted();
 extern BOOL XcpIsConnected();
 extern BOOL XcpIsDaqRunning();
-extern BOOL XcpIsDaqPacked();
+extern BOOL XcpIsDaqEventRunning(uint16_t event);
 extern uint64_t XcpGetDaqStartTime();
 extern uint32_t XcpGetDaqOverflowCount();
 
@@ -68,12 +95,11 @@ extern uint32_t XcpGetDaqOverflowCount();
 #ifdef XCP_ENABLE_DAQ_CLOCK_MULTICAST
 extern uint16_t XcpGetClusterId();
 #endif
-#ifdef XCP_ENABLE_PTP
-extern void XcpSetGrandmasterClockInfo(uint8_t* id, uint8_t epoch, uint8_t stratumLevel);
-#endif
 
 // Event list
 #ifdef XCP_ENABLE_DAQ_EVENT_LIST
+
+#define XCP_INVALID_EVENT 0xFFFF
 
 // Clear event list
 extern void XcpClearEventList();
@@ -91,20 +117,37 @@ extern tXcpEvent* XcpGetEvent(uint16_t event);
 /* Protocol layer external dependencies                                     */
 /****************************************************************************/
 
-// All functions must be thread save
+// All callback functions supplied by the application
+// Must be thread save
 
-/* Callbacks */
+/* Callbacks on connect, measurement prepare, start and stop */
 extern BOOL ApplXcpConnect();
+#if XCP_PROTOCOL_LAYER_VERSION >= 0x0104
 extern BOOL ApplXcpPrepareDaq();
+#endif
 extern BOOL ApplXcpStartDaq();
 extern void ApplXcpStopDaq();
 
-/* Generate a native pointer from XCP address extension and address */
-extern uint8_t* ApplXcpGetPointer(uint8_t addr_ext, uint32_t addr);
-extern uint32_t ApplXcpGetAddr(uint8_t* p);
-extern uint8_t *ApplXcpGetBaseAddr();
+/* Address conversions from A2L address to pointer and vice versa */
+/* Note that xcpAddrExt 0x01 and 0xFF are reserved for special use cases (0x01 if XCP_ENABLE_DYN_ADDRESSING, 0xFF if XCP_ENABLE_IDT_A2L_UPLOAD) */
+extern uint8_t* ApplXcpGetPointer(uint8_t xcpAddrExt, uint32_t xcpAddr); /* Create a pointer (uint8_t*) from xcpAddrExt and xcpAddr, returns NULL if no access */
+extern uint32_t ApplXcpGetAddr(uint8_t* p); // Calculate the xcpAddr address from a pointer
+extern uint8_t *ApplXcpGetBaseAddr(); // Get the base address for DAQ data access */
+/*
+ Note 1:
+   For DAQ performance and memory optimization:
+   XCPlite DAQ tables do not store address extensions and do not use ApplXcpGetPointer(), addr is stored as 32 Bit value and access is hardcoded by *(baseAddr+xcpAddr)
+   All accesible DAQ data is within a 4GByte range starting at ApplXcpGetBaseAddr()
+   Address extensions to increase the addressable range are not supported yet
+   Attempting to setup an ODT entry with address extension != 0 gives a CRC_ACCESS_DENIED error message
 
-/* Switch calibration page */
+ Note 2:
+   ApplXcpGetPointer may do address transformations according to active calibration page
+   When measuring calibration variables inswitch
+*/
+
+
+/* Switch calibration pages */
 #ifdef XCP_ENABLE_CAL_PAGE
 extern uint8_t ApplXcpGetCalPage(uint8_t segment, uint8_t mode);
 extern uint8_t ApplXcpSetCalPage(uint8_t segment, uint8_t page, uint8_t mode);
@@ -112,14 +155,31 @@ extern uint8_t ApplXcpSetCalPage(uint8_t segment, uint8_t page, uint8_t mode);
 
 /* DAQ clock */
 extern uint64_t ApplXcpGetClock64();
+
+#define CLOCK_STATE_SYNCH_IN_PROGRESS                  (0)
+#define CLOCK_STATE_SYNCH                              (1)
+#define CLOCK_STATE_FREE_RUNNING                       (7)
+#define CLOCK_STATE_GRANDMASTER_STATE_SYNCH             (1 << 3)
 extern uint8_t ApplXcpGetClockState();
+
 #ifdef XCP_ENABLE_PTP
+#define CLOCK_STRATUM_LEVEL_UNKNOWN   255
+#define CLOCK_STRATUM_LEVEL_ARB       16   // unsychronized
+#define CLOCK_STRATUM_LEVEL_UTC       0    // Atomic reference clock
+#define CLOCK_EPOCH_TAI 0 // Atomic monotonic time since 1.1.1970 (TAI)
+#define CLOCK_EPOCH_UTC 1 // Universal Coordinated Time (with leap seconds) since 1.1.1970 (UTC)
+#define CLOCK_EPOCH_ARB 2 // Arbitrary (epoch unknown)
 extern BOOL ApplXcpGetClockInfoGrandmaster(uint8_t* uuid, uint8_t* epoch, uint8_t* stratum);
 #endif
 
-/* Info (for GET_ID) */
+/* Get info for GET_ID command (pointer to and length of data) */
+/* Supports IDT_ASCII, IDT_ASAM_NAME, IDT_ASAM_PATH, IDT_ASAM_URL, IDT_ASAM_EPK and IDT_ASAM_UPLOAD */
+/* Returns 0 if not available */
 extern uint32_t ApplXcpGetId(uint8_t id, uint8_t* buf, uint32_t bufLen);
-#ifdef XCP_ENABLE_IDT_A2L_UPLOAD // Enable GET_ID: A2L content upload to host
-extern BOOL ApplXcpReadA2L(uint8_t size, uint32_t addr, uint8_t* data);
+
+/* Read a chunk (offset,size) of the A2L file for upload */
+/* Return FALSE if out of bounds */
+#ifdef XCP_ENABLE_IDT_A2L_UPLOAD // Enable A2L content upload to host (IDT_ASAM_UPLOAD)
+extern BOOL ApplXcpReadA2L(uint8_t size, uint32_t offset, uint8_t* data);
 #endif
 

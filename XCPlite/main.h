@@ -28,16 +28,10 @@
 
 
 #ifdef _WIN
-  #ifndef WIN32_LEAN_AND_MEAN
-    #define WIN32_LEAN_AND_MEAN
-  #endif
-  #ifndef _CRT_SECURE_NO_WARNINGS
-    #define _CRT_SECURE_NO_WARNINGS
-  #endif
+#define WIN32_LEAN_AND_MEAN
+#define _CRT_SECURE_NO_WARNINGS
 #else
-  #ifndef _DEFAULT_SOURCE
-    #define _DEFAULT_SOURCE
-  #endif
+#define _DEFAULT_SOURCE
 #endif
 
 
@@ -89,4 +83,6 @@
 #define TRUE 1
 
 #endif
+
+#include "main_cfg.h"
 

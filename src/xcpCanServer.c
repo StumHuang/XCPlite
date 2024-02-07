@@ -1,10 +1,10 @@
 /*----------------------------------------------------------------------------
 | File:
-|   xcpServer.c
+|   xcpCanServer.c
 |
 | Description:
-|   XCP on UDP Server
-|   SHows how to integrate the XCP driver in an application
+|   XCP on CAN Server
+|   SHows how to integrate the XCP on CAN driver in an application
 |   Creates threads for cmd handling and data transmission
 |
 | Copyright (c) Vector Informatik GmbH. All rights reserved.
@@ -15,8 +15,8 @@
 #include "main.h"
 #include "platform.h"
 #include "util.h"
-#include "xcpLite.h"    
-#include "xcpServer.h"
+#include "xcpLite.h"   
+#include "xcpCanServer.h"
 
 
 #if defined(_WIN) // Windows
@@ -34,7 +34,6 @@ static void* XcpServerTransmitThread(void* par);
 static struct {
 
     BOOL isInit; 
-    uint64_t FlushCycleTimer;
 
     // Threads
     tXcpThread DAQThreadHandle;
@@ -46,28 +45,27 @@ static struct {
 
 
 // Check XCP server status
-BOOL XcpServerStatus() {
+BOOL XcpCanServerStatus() {
     return gXcpServer.isInit && gXcpServer.TransmitThreadRunning && gXcpServer.ReceiveThreadRunning;
 }
 
 
 // XCP server init
-BOOL XcpServerInit( const uint8_t *addr, uint16_t port, BOOL useTCP, uint16_t segmentSize) {
-
-    int r;
+BOOL XcpCanServerInit(BOOL useCANFD, uint16_t croId, uint16_t dtoId, uint32_t bitRate)
+{
+    int r = 0;
 
     if (gXcpServer.isInit) return FALSE;
     XCP_DBG_PRINT1("\nStart XCP server\n");
 
     gXcpServer.TransmitThreadRunning = 0;
     gXcpServer.ReceiveThreadRunning = 0;
-    gXcpServer.FlushCycleTimer = 0;
 
     // Initialize XCP protocol layer
     XcpInit();
 
     // Initialize XCP transport layer
-    r = XcpTlInit(addr, port, useTCP, segmentSize);
+    r = XcpCanTlInit(useCANFD, croId, dtoId, bitRate);
     if (!r) return 0;
 
     // Start XCP protocol layer
@@ -76,26 +74,26 @@ BOOL XcpServerInit( const uint8_t *addr, uint16_t port, BOOL useTCP, uint16_t se
     // Create threads
     create_thread(&gXcpServer.DAQThreadHandle, XcpServerTransmitThread);
     create_thread(&gXcpServer.CMDThreadHandle, XcpServerReceiveThread);
-#if 0
-    SetThreadPriority(gXcpServer.DAQThreadHandle, THREAD_PRIORITY_TIME_CRITICAL);
-#endif
 
     gXcpServer.isInit = TRUE;
     return TRUE;
 }
 
-BOOL XcpServerShutdown() {
+BOOL XcpCanServerShutdown() {
+
     if (gXcpServer.isInit) {
         XcpDisconnect();
         cancel_thread(gXcpServer.DAQThreadHandle);
         cancel_thread(gXcpServer.CMDThreadHandle);
+
+        // Shutdown XCP transport layer
         XcpTlShutdown();
     }
     return TRUE;
 }
 
 
-// XCP server unicast command receive thread
+// XCP server command receive thread
 #if defined(_WIN) // Windows
 DWORD WINAPI XcpServerReceiveThread(LPVOID par)
 #elif defined(_LINUX) // Linux
@@ -105,10 +103,11 @@ extern void* XcpServerReceiveThread(void* par)
     (void)par;
     XCP_DBG_PRINT3("Start XCP CMD thread\n");
 
-    // Receive XCP unicast commands loop
+    // Receive XCP command message loop
     gXcpServer.ReceiveThreadRunning = 1;
     for (;;) {
-        if (!XcpTlHandleCommands()) break; // error -> terminate thread
+        // Blocking
+        if (!XcpTlHandleCommands(XCPTL_TIMEOUT_INFINITE)) break; // Error -> terminate thread
     }
     gXcpServer.ReceiveThreadRunning = 0;
 
@@ -134,24 +133,10 @@ extern void* XcpServerTransmitThread(void* par)
     gXcpServer.TransmitThreadRunning = 1;
     for (;;) {
 
-        // Wait for transmit data available, time out at least for required flush cycle
-#ifdef XCPTL_QUEUE_FLUSH_CYCLE_MS
-      BOOL timeout = !XcpTlWaitForTransmitData(XCPTL_QUEUE_FLUSH_CYCLE_MS);     
-      if (timeout) { // Timeout
+        // Wait for transmit data available
+        XcpTlWaitForTransmitData(XCPTL_TIMEOUT_INFINITE);
 
-        // Every XCPTL_QUEUE_FLUSH_CYCLE_MS ms 
-        // Cyclic flush of incomplete packets from transmit queue or transmit buffer to keep tool visualizations up to date
-        uint64_t c = clockGetLast();
-        if (c - gXcpServer.FlushCycleTimer > XCPTL_QUEUE_FLUSH_CYCLE_MS* CLOCK_TICKS_PER_MS) {
-          gXcpServer.FlushCycleTimer = c;
-          XcpTlFlushTransmitBuffer();
-        }
-      }
-#else
-      XcpTlWaitForTransmitData(0); // Wait infinite
-#endif
-
-        // Transmit all completed UDP packets from the transmit queue
+        // Transmit all messages from the transmit queue
         n = XcpTlHandleTransmitQueue();
         if (n<0) {
           XCP_DBG_PRINT_ERROR("ERROR: XcpTlHandleTransmitQueue failed!\n");
@@ -164,4 +149,5 @@ extern void* XcpServerTransmitThread(void* par)
     XCP_DBG_PRINT_ERROR("XCP DAQ thread terminated!\n");
     return 0;
 }
+
 

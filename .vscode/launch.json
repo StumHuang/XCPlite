@@ -8,7 +8,7 @@
             "name": "(gdb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build_C_Demo/C_Demo.out",
+            "program": "${workspaceFolder}/build_C_Demo/XCPlite.out",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build_C_Demo/",

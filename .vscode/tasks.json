@@ -8,7 +8,7 @@
         {
             "label": "cmake",
             "type": "shell",
-            "command": "echo 1234567890 | sudo -S cmake  -S C_Demo -B build_C_Demo",
+            "command": "echo 1234567890 | sudo -S cmake  -S XCPlite -B build_C_Demo",
             "args": [
             
             ],

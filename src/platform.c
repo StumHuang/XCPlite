@@ -15,16 +15,12 @@
  ----------------------------------------------------------------------------*/
 
 #include "main.h"
-#include "main_cfg.h"
 #include "platform.h"
+#include "options.h"
 #include "util.h"
 
 
-#ifdef _WIN // Windows needs to link with Ws2_32.lib
-
-#if OPTION_ENABLE_XLAPI_V3
-#include "xl_udp.h"
-#endif
+#if defined(_WIN) // Windows // Windows needs to link with Ws2_32.lib
 
 #pragma comment(lib, "ws2_32.lib")
 
@@ -38,88 +34,111 @@
 #ifdef _LINUX
 
 int _getch() {
-    static int ch = -1, fd = 0;
-    struct termios neu, alt;
-    fd = fileno(stdin);
-    tcgetattr(fd, &alt);
-    neu = alt;
-    neu.c_lflag = (unsigned int)neu.c_lflag & ~(unsigned int)(ICANON | ECHO);
-    tcsetattr(fd, TCSANOW, &neu);
-    ch = getchar();
-    tcsetattr(fd, TCSANOW, &alt);
-    return ch;
+  struct termios oldt, newt;
+  int ch;
+  tcgetattr(STDIN_FILENO, &oldt);
+  newt = oldt;
+  newt.c_lflag &= ~ICANON;
+  // newt.c_lflag &= ECHO; // echo
+  newt.c_lflag &= ~ECHO; // no echo
+  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+  ch = getchar();
+  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+  return ch;
 }
 
 int _kbhit() {
-    struct termios term, oterm;
-    int fd = 0;
-    int c = 0;
-    tcgetattr(fd, &oterm);
-    memcpy(&term, &oterm, sizeof(term));
-    term.c_lflag = term.c_lflag & (!ICANON);
-    term.c_cc[VMIN] = 0;
-    term.c_cc[VTIME] = 1;
-    tcsetattr(fd, TCSANOW, &term);
-    c = getchar();
-    tcsetattr(fd, TCSANOW, &oterm);
-    if (c != -1)
-        ungetc(c, stdin);
-    return ((c != -1) ? 1 : 0);
+  struct termios oldt, newt;
+  int ch;
+  int oldf;
+  tcgetattr(STDIN_FILENO, &oldt);
+  newt = oldt;
+  newt.c_lflag &= ~(ICANON | ECHO);
+  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+  oldf = fcntl(STDIN_FILENO, F_GETFL, 0);
+  fcntl(STDIN_FILENO, F_SETFL, oldf | O_NONBLOCK);
+  ch = getchar();
+  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+  fcntl(STDIN_FILENO, F_SETFL, oldf);
+  if (ch != EOF) {
+    ungetc(ch, stdin);
+    return 1;
+  }
+  return 0;
 }
 
+
 #endif
+
 
 
 /**************************************************************************/
 // Sleep
 /**************************************************************************/
 
-#ifdef _LINUX // Linux
+#if defined(_LINUX) // Linux
 
 void sleepNs(uint32_t ns) {
+  if (ns == 0) {
+    sleep(0);
+  }
+  else {
     struct timespec timeout, timerem;
     assert(ns < 1000000000UL);
     timeout.tv_sec = 0;
     timeout.tv_nsec = (int32_t)ns;
     nanosleep(&timeout, &timerem);
+  }
 }
 
 void sleepMs(uint32_t ms) {
+  if (ms == 0) {
+    sleep(0);
+  }
+  else {
     struct timespec timeout, timerem;
     timeout.tv_sec = (int32_t)ms / 1000;
     timeout.tv_nsec = (int32_t)(ms % 1000) * 1000000;
     nanosleep(&timeout, &timerem);
+  }
 }
 
-#else
+#elif defined(_WIN) // Windows
 
 
 void sleepNs(uint32_t ns) {
 
     uint64_t t1, t2;
     uint32_t us = ns / 1000;
-    uint32_t ms = us / 1000;
 
-    // Start sleeping at 2000us, shorter sleeps are more precise but need significant CPU time
-    if (us >= 2000) {
-        Sleep(ms);
+    // Sleep
+    if (us > 1000) {
+        Sleep(us/1000);
     }
-    // Busy wait
-    else {
-        t1 = t2 = clockGet64();
+
+    // Busy wait <= 1ms, -> CPU load !!!
+    else if (us>0) {
+      
+        t1 = t2 = clockGet();
         uint64_t te = t1 + us * (uint64_t)CLOCK_TICKS_PER_US;
         for (;;) {
-            t2 = clockGet64();
+            t2 = clockGet();
             if (t2 >= te) break;
             Sleep(0);
         }
     }
+    else {
+      Sleep(0);
+    }
 }
 
 void sleepMs(uint32_t ms) {
-
+    if (ms > 0 && ms < 10) {  
+      DBG_PRINT_ERROR("WARNING: cannot precisely sleep less than 10ms!\n");
+    }
     Sleep(ms);
 }
+
 
 
 #endif // Windows
@@ -129,7 +148,7 @@ void sleepMs(uint32_t ms) {
 // Mutex
 /**************************************************************************/
 
-#ifdef _LINUX
+#if defined(_LINUX)
 
 void mutexInit(MUTEX* m, int recursive, uint32_t spinCount) {
     (void)spinCount;
@@ -169,18 +188,19 @@ void mutexDestroy(MUTEX* m) {
 // Sockets
 /**************************************************************************/
 
+
 #ifdef _LINUX
 
 int socketStartup() {
 
-    return 1;
+  return 1;
 }
 
 void socketCleanup() {
 
 }
 
-int socketOpen(SOCKET* sp, BOOL useTCP, BOOL nonBlocking, BOOL reuseaddr) {
+int socketOpen(SOCKET* sp, BOOL useTCP, BOOL nonBlocking, BOOL reuseaddr, BOOL timestamps) {
     (void)nonBlocking;
     // Create a socket
     *sp = socket(AF_INET, useTCP ?SOCK_STREAM:SOCK_DGRAM , 0);
@@ -197,7 +217,7 @@ int socketOpen(SOCKET* sp, BOOL useTCP, BOOL nonBlocking, BOOL reuseaddr) {
     return 1;
 }
 
-int socketBind(SOCKET sock, const uint8_t* addr, uint16_t port) {
+int socketBind(SOCKET sock, uint8_t* addr, uint16_t port) {
 
     // Bind the socket to any address and the specified port
     SOCKADDR_IN a;
@@ -250,7 +270,7 @@ static int GetMAC(char* ifname, uint8_t* mac) {
             if (((ifaptr)->ifa_addr)->sa_family == AF_LINK) {
                 memcpy(mac, (unsigned char *)LLADDR((struct sockaddr_dl *)(ifaptr)->ifa_addr), 6);
             }
-#else
+#else 
             if (!strcmp(ifaptr->ifa_name, ifname) && ifaptr->ifa_addr->sa_family == AF_PACKET) {
                 struct sockaddr_ll* s = (struct sockaddr_ll*)ifaptr->ifa_addr;
                 memcpy(mac, s->sll_addr, 6);
@@ -285,7 +305,7 @@ int socketGetLocalAddr(uint8_t* mac, uint8_t* addr) {
                 struct sockaddr_in* sa = (struct sockaddr_in*)(ifa->ifa_addr);
                 if (0x100007f != sa->sin_addr.s_addr) { /* not loop back adapter (127.0.0.1) */
                     inet_ntop(AF_INET, &sa->sin_addr.s_addr, strbuf, sizeof(strbuf));
-                    DBG_PRINTF1("  Network interface %s: ip=%s\n", ifa->ifa_name, strbuf);
+                    DBG_PRINTF3("  Network interface %s: ip=%s\n", ifa->ifa_name, strbuf);
                     if (addr1 == 0) {
                         addr1 = sa->sin_addr.s_addr;
                         ifa1 = ifa;
@@ -300,7 +320,7 @@ int socketGetLocalAddr(uint8_t* mac, uint8_t* addr) {
         if (mac) memcpy(mac, mac1, 6);
         if (addr) memcpy(addr, &addr1, 4);
         inet_ntop(AF_INET, &addr1, strbuf, sizeof(strbuf));
-        DBG_PRINTF1("  Use adapter %s with ip=%s, mac=%02X-%02X-%02X-%02X-%02X-%02X for A2L info and clock UUID\n", ifa1->ifa_name, strbuf, mac1[0], mac1[1], mac1[2], mac1[3], mac1[4], mac1[5]);
+        DBG_PRINTF3("  Use adapter %s with ip=%s, mac=%02X-%02X-%02X-%02X-%02X-%02X for A2L info and clock UUID\n", ifa1->ifa_name, strbuf, mac1[0], mac1[1], mac1[2], mac1[3], mac1[4], mac1[5]);
         return 1;
     }
     return 0;
@@ -312,59 +332,62 @@ int socketGetLocalAddr(uint8_t* mac, uint8_t* addr) {
 #endif // _LINUX
 
 
-#ifdef _WIN
+#if defined(_WIN)
+
+uint32_t socketGetTimestampMode(uint8_t *clockType) {
+
+  if (clockType!=NULL) *clockType = SOCKET_TIMESTAMP_FREE_RUNNING;
+  return SOCKET_TIMESTAMP_PC;
+}
+
+BOOL socketSetTimestampMode(uint8_t m) {
+
+  if (m != SOCKET_TIMESTAMP_NONE && m != SOCKET_TIMESTAMP_PC) {
+    DBG_PRINT_ERROR("ERROR: unsupported timestamp mode!\n");
+    return FALSE;
+  }
+  return TRUE;
+}
+
+int32_t socketGetLastError() {
+
+  return WSAGetLastError();
+}
+
 
 BOOL socketStartup() {
 
+  int err;
+  WORD wsaVersionRequested;
+  WSADATA wsaData;
 
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketStartup((char*)APP_NAME);
-    }
-#endif
+  // Init Winsock2
+  wsaVersionRequested = MAKEWORD(2, 2);
+  err = WSAStartup(wsaVersionRequested, &wsaData);
+  if (err != 0) {
+      DBG_PRINTF_ERROR("ERROR: WSAStartup failed with ERROR: %d!\n", err);
+      return FALSE;
+  }
+  if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) { // Confirm that the WinSock DLL supports 2.2
+      DBG_PRINT_ERROR("ERROR: could not find a usable version of Winsock.dll!\n");
+      WSACleanup();
+      return FALSE;
+  }
 
-
-    int err;
-
-    WORD wsaVersionRequested;
-    WSADATA wsaData;
-
-    // Init Winsock2
-    wsaVersionRequested = MAKEWORD(2, 2);
-    err = WSAStartup(wsaVersionRequested, &wsaData);
-    if (err != 0) {
-        DBG_PRINTF_ERROR("ERROR: WSAStartup failed with ERROR: %d!\n", err);
-        return FALSE;
-    }
-    if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2) { // Confirm that the WinSock DLL supports 2.2
-        DBG_PRINT_ERROR("ERROR: could not find a usable version of Winsock.dll!\n");
-        WSACleanup();
-        return FALSE;
-    }
-
-    return TRUE;
+  return TRUE;
 }
 
 
 void socketCleanup(void) {
 
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        xlUdpSocketCleanup();
-    }
-#endif
-
     WSACleanup();
 }
 
+// Create a socket, TCP or UDP
+// Note: Enabling HW timestamps may have impact on throughput
+BOOL socketOpen(SOCKET* sp, BOOL useTCP, BOOL nonBlocking, BOOL reuseaddr, BOOL timestamps) {
 
-BOOL socketOpen(SOCKET* sp, int useTCP, int nonBlocking, int reuseaddr) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketOpen((XL_SOCKET*)sp, useTCP, nonBlocking, reuseaddr);
-    }
-#endif
+    (void)timestamps;
 
     // Create a socket
     if (!useTCP) {
@@ -374,7 +397,9 @@ BOOL socketOpen(SOCKET* sp, int useTCP, int nonBlocking, int reuseaddr) {
         #define SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR, 12)
         BOOL bNewBehavior = FALSE;
         DWORD dwBytesReturned = 0;
-        WSAIoctl(*sp, SIO_UDP_CONNRESET, &bNewBehavior, sizeof bNewBehavior, NULL, 0, &dwBytesReturned, NULL, NULL);
+        if (*sp != INVALID_SOCKET) {
+          WSAIoctl(*sp, SIO_UDP_CONNRESET, &bNewBehavior, sizeof bNewBehavior, NULL, 0, &dwBytesReturned, NULL, NULL);
+        }
     }
     else {
         *sp = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -401,18 +426,12 @@ BOOL socketOpen(SOCKET* sp, int useTCP, int nonBlocking, int reuseaddr) {
 }
 
 
-BOOL socketBind(SOCKET sock, const uint8_t *addr, uint16_t port) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketBind((XL_SOCKET)sock, gOptionXlServerNet, gOptionXlServerSeg, gOptionXlServerMac, addr, port);
-    }
-#endif
+BOOL socketBind(SOCKET sock, uint8_t *addr, uint16_t port) {
 
     // Bind the socket to any address and the specified port
     SOCKADDR_IN a;
     a.sin_family = AF_INET;
-    if (addr != NULL && addr[0] !=0) { 
+    if (addr != NULL && *(uint32_t*)addr !=0) { 
         a.sin_addr.s_addr = *(uint32_t*)addr; // Bind to the specific addr given
     }
     else { // NULL or 0.x.x.x
@@ -434,12 +453,6 @@ BOOL socketBind(SOCKET sock, const uint8_t *addr, uint16_t port) {
 
 BOOL socketShutdown(SOCKET sock) {
 
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketShutdown(sock);
-    }
-#endif
-
     if (sock != INVALID_SOCKET) {
         shutdown(sock,SD_BOTH);
     }
@@ -447,12 +460,6 @@ BOOL socketShutdown(SOCKET sock) {
 }
 
 BOOL socketClose(SOCKET* sockp) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketClose((XL_SOCKET*)sockp);
-    }
-#endif
 
     if (*sockp != INVALID_SOCKET) {
         closesocket(*sockp);
@@ -467,14 +474,6 @@ BOOL socketClose(SOCKET* sockp) {
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 BOOL socketGetLocalAddr(uint8_t* mac, uint8_t* addr) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        if (addr) memcpy(addr, gOptionXlServerAddr, 4);
-        if (mac) memcpy(mac, gOptionXlServerMac, 6);
-        return 1;
-    }
-#endif
 
     static uint8_t addr1[4] = { 0,0,0,0 };
     static uint8_t mac1[6] = { 0,0,0,0,0,0 };
@@ -500,15 +499,17 @@ BOOL socketGetLocalAddr(uint8_t* mac, uint8_t* addr) {
                 if (pAdapter->Type == MIB_IF_TYPE_ETHERNET) {
                     inet_pton(AF_INET, pAdapter->IpAddressList.IpAddress.String, &a);
                     if (a!=0) {
-                        DBG_PRINTF1("  Ethernet adapter %" PRIu32 ":", (uint32_t) pAdapter->Index);
-                        //DBG_PRINTF1(" %s", pAdapter->AdapterName);
-                        DBG_PRINTF1(" %s", pAdapter->Description);
-                        DBG_PRINTF1(" %02X-%02X-%02X-%02X-%02X-%02X", pAdapter->Address[0], pAdapter->Address[1], pAdapter->Address[2], pAdapter->Address[3], pAdapter->Address[4], pAdapter->Address[5]);
-                        DBG_PRINTF1(" %s", pAdapter->IpAddressList.IpAddress.String);
-                        //DBG_PRINTF1(" %s", pAdapter->IpAddressList.IpMask.String);
-                        //DBG_PRINTF1(" Gateway: %s", pAdapter->GatewayList.IpAddress.String);
-                        //if (pAdapter->DhcpEnabled) printf(" DHCP");
-                        DBG_PRINT1("\n");
+
+                        DBG_PRINTF3("  Ethernet adapter %" PRIu32 ":", (uint32_t) pAdapter->Index);
+                        //DBG_PRINTF3(" %s", pAdapter->AdapterName);
+                        DBG_PRINTF3(" %s", pAdapter->Description);
+                        DBG_PRINTF3(" %02X-%02X-%02X-%02X-%02X-%02X", pAdapter->Address[0], pAdapter->Address[1], pAdapter->Address[2], pAdapter->Address[3], pAdapter->Address[4], pAdapter->Address[5]);
+                        DBG_PRINTF3(" %s", pAdapter->IpAddressList.IpAddress.String);
+                        //DBG_PRINTF3(" %s", pAdapter->IpAddressList.IpMask.String);
+                        //DBG_PRINTF3(" Gateway: %s", pAdapter->GatewayList.IpAddress.String);
+                        //if (pAdapter->DhcpEnabled) DBG_PRINTF3(" DHCP");
+                        DBG_PRINT3("\n");
+
                         if (addr1[0] == 0 ) {
                             memcpy(addr1, (uint8_t*)&a, 4);
                             memcpy(mac1, pAdapter->Address, 6);
@@ -534,12 +535,6 @@ BOOL socketGetLocalAddr(uint8_t* mac, uint8_t* addr) {
 
 BOOL socketListen(SOCKET sock) {
 
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketListen(sock);
-    }
-#endif
-
     if (listen(sock, 5)) {
         DBG_PRINTF_ERROR("ERROR %d: listen failed!\n", socketGetLastError());
         return 0;
@@ -548,12 +543,6 @@ BOOL socketListen(SOCKET sock) {
 }
 
 SOCKET socketAccept(SOCKET sock, uint8_t addr[]) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketAccept(sock, addr);
-    }
-#endif
 
     struct sockaddr_in sa;
     socklen_t sa_size = sizeof(sa);
@@ -564,12 +553,6 @@ SOCKET socketAccept(SOCKET sock, uint8_t addr[]) {
 
 
 BOOL socketJoin(SOCKET sock, uint8_t* maddr) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketJoin(sock, maddr);
-    }
-#endif
 
     struct ip_mreq group;
     group.imr_multiaddr.s_addr = *(uint32_t*)maddr;
@@ -584,13 +567,7 @@ BOOL socketJoin(SOCKET sock, uint8_t* maddr) {
 
 // Receive from socket
 // Return number of bytes received, 0 when socket closed, would block or empty UDP packet received, -1 on error
-int16_t socketRecvFrom(SOCKET sock, uint8_t* buffer, uint16_t bufferSize, uint8_t *addr, uint16_t *port) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketRecvFrom(sock, buffer, bufferSize, addr, port);
-    }
-#endif
+int16_t socketRecvFrom(SOCKET sock, uint8_t* buffer, uint16_t bufferSize, uint8_t *addr, uint16_t *port, uint64_t *time) {
 
     SOCKADDR_IN src;
     socklen_t srclen = sizeof(src);
@@ -607,6 +584,7 @@ int16_t socketRecvFrom(SOCKET sock, uint8_t* buffer, uint16_t bufferSize, uint8_
         DBG_PRINTF_ERROR("ERROR %u: recvfrom failed (result=%d)!\n", err, n);
         return -1;
     }
+    if (time!=NULL) *time = clockGet();
     if (port) *port = htons(src.sin_port);
     if (addr) memcpy(addr, &src.sin_addr.s_addr, 4);
     return n;
@@ -615,13 +593,6 @@ int16_t socketRecvFrom(SOCKET sock, uint8_t* buffer, uint16_t bufferSize, uint8_
 // Receive from socket
 // Return number of bytes received, 0 when socket closed, would block or empty UDP packet received, -1 on error
 int16_t socketRecv(SOCKET sock, uint8_t* buffer, uint16_t size, BOOL waitAll) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        assert(!waitAll);
-        return xlUdpSocketRecv(sock, buffer, size);
-    }
-#endif
 
     int16_t n = (int16_t)recv(sock, (char*)buffer, size, waitAll ? MSG_WAITALL:0);
     if (n == 0) {
@@ -642,22 +613,19 @@ int16_t socketRecv(SOCKET sock, uint8_t* buffer, uint16_t size, BOOL waitAll) {
 
 // Send datagram on socket
 // Must be thread save
-int16_t socketSendTo(SOCKET sock, const uint8_t* buffer, uint16_t size, const uint8_t* addr, uint16_t port) {
-
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketSendTo(sock, buffer, size, addr, port);
-    }
-#endif
+int16_t socketSendTo(SOCKET sock, const uint8_t* buffer, uint16_t size, const uint8_t* addr, uint16_t port, uint64_t *time) {
 
     SOCKADDR_IN sa;
     sa.sin_family = AF_INET;
-#ifdef _WIN
+#if defined(_WIN) // Windows
     memcpy(&sa.sin_addr.S_un.S_addr, addr, 4);
-#else
+#elif defined(_LINUX) // Linux
     memcpy(&sa.sin_addr.s_addr, addr, 4);
+#else
+#error
 #endif
     sa.sin_port = htons(port);
+    if (time!=NULL) *time = clockGet();
     return (int16_t)sendto(sock, (const char*)buffer, size, 0, (SOCKADDR*)&sa, (uint16_t)sizeof(sa));
 }
 
@@ -665,22 +633,24 @@ int16_t socketSendTo(SOCKET sock, const uint8_t* buffer, uint16_t size, const ui
 // Must be thread save
 int16_t socketSend(SOCKET sock, const uint8_t* buffer, uint16_t size) {
 
-#if OPTION_ENABLE_XLAPI_V3
-    if (gOptionUseXLAPI) {
-        return xlUdpSocketSend(sock, buffer, size);
-    }
-#endif
-
     return (int16_t)send(sock, (const char *)buffer, size, 0);
 }
-
 
 
 /**************************************************************************/
 // Clock
 /**************************************************************************/
 
-#ifdef _LINUX // Linux
+static uint64_t sClock = 0;
+
+// Get the last known clock value
+// Save CPU load, clockGet may take up to 2us run time, depending on platform
+// For slow timeouts and timers, it is sufficient to rely on the relatively high call frequency of clockGet() by other parts of the application
+uint64_t clockGetLast() {
+  return sClock;
+}
+
+#if defined(_LINUX) // Linux
 
 /*
 Linux clock type
@@ -707,7 +677,7 @@ char* clockGetString(char* s, uint32_t l, uint64_t c) {
     uint64_t fns = c % CLOCK_TICKS_PER_S;
     SNPRINTF(s,l, "%u.%u.%u %02u:%02u:%02u +%" PRIu64 "ns", 
         tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, 
-        (tm.tm_hour + 2) % 24, tm.tm_min, tm.tm_sec, 
+        tm.tm_hour % 24, tm.tm_min, tm.tm_sec, 
         fns);
 #endif
     return s;
@@ -731,13 +701,15 @@ BOOL clockInit()
 #endif
     DBG_PRINT2(")\n");
 
+    sClock = 0;
+
     clock_getres(CLOCK_TYPE, &gtr);
     DBG_PRINTF2("Clock resolution is %lds,%ldns!\n", gtr.tv_sec, gtr.tv_nsec);
 
 #ifndef CLOCK_USE_UTC_TIME_NS
     clock_gettime(CLOCK_TYPE, &gts0);
 #endif
-    clockGet64();
+    clockGet();
 
 #ifdef XCP_ENABLE_DGB_PRINT
     if (DBG_LEVEL >= 2) {
@@ -753,9 +725,9 @@ BOOL clockInit()
         clock_gettime(CLOCK_REALTIME, &gts_REALTIME);
         DBG_PRINTF2("  CLOCK_TAI=%lus CLOCK_REALTIME=%lus time=%lu timeofday=%lu\n", gts_TAI.tv_sec, gts_REALTIME.tv_sec, now, ptm.tv_sec);
         // Check
-        t1 = clockGet64();
+        t1 = clockGet();
         sleepNs(100000);
-        t2 = clockGet64();
+        t2 = clockGet();
         DBG_PRINTF2("  +0us:   %s\n", clockGetString(s, sizeof(s), t1));
         DBG_PRINTF2("  +100us: %s (%u)\n", clockGetString(s, sizeof(s), t2), (uint32_t)(t2 - t1));
         DBG_PRINT2("\n");
@@ -767,14 +739,14 @@ BOOL clockInit()
 
 
 // Free running clock with 1us tick
-uint64_t clockGet64() {
+uint64_t clockGet() {
 
     struct timespec ts;
     clock_gettime(CLOCK_TYPE, &ts);
 #ifdef CLOCK_USE_UTC_TIME_NS // ns since 1.1.1970
-    return (((uint64_t)(ts.tv_sec) * 1000000000ULL) + (uint64_t)(ts.tv_nsec)); // ns
+    return sClock = (((uint64_t)(ts.tv_sec) * 1000000000ULL) + (uint64_t)(ts.tv_nsec)); // ns
 #else // us since init
-    return (((uint64_t)(ts.tv_sec - gts0.tv_sec) * 1000000ULL) + (uint64_t)(ts.tv_nsec / 1000)); // us
+    return sClock = (((uint64_t)(ts.tv_sec - gts0.tv_sec) * 1000000ULL) + (uint64_t)(ts.tv_nsec / 1000)); // us
 #endif
 }
 
@@ -782,24 +754,43 @@ uint64_t clockGet64() {
 
 // Performance counter to clock conversion
 static uint64_t sFactor = 0; // ticks per us
+#ifdef CLOCK_USE_UTC_TIME_NS
 static uint8_t sDivide = 0; // divide or multiply
+#endif
 static uint64_t sOffset = 0; // offset
 
-#ifdef ENABLE_DEBUG_PRINTS
-char* clockGetString(char* s, uint32_t l, uint64_t c) {
+char* clockGetString(char* str, uint32_t l, uint64_t c) {
 
 #ifndef CLOCK_USE_UTC_TIME_NS
-    SNPRINTF(s, l, "%gs", (double)c / CLOCK_TICKS_PER_S);
+    SNPRINTF(str, l, "%gs", (double)c / CLOCK_TICKS_PER_S);
 #else
-    time_t t = (time_t)(c / CLOCK_TICKS_PER_S); // s
-    struct tm tm;
-    gmtime_s(&tm, &t);
-    uint64_t fns = c % CLOCK_TICKS_PER_S;
-    SNPRINTF(s, l, "%u.%u.%u %02u:%02u:%02u +%" PRIu64 "s", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, (tm.tm_hour + 2) % 24, tm.tm_min, tm.tm_sec, fns);
+    uint64_t s = c / CLOCK_TICKS_PER_S;
+    uint64_t ns = c % CLOCK_TICKS_PER_S;
+    if (s < 3600 * 24 * 365 * 30) { // ARB epoch
+        SNPRINTF(str, l, "%" PRIu64 "d%" PRIu64 "h%" PRIu64 "m%" PRIu64 "s+%" PRIu64 "ns", s / (3600 * 24), (s % (3600 * 24)) / 3600, ((s % (3600 * 24)) % 3600) / 60, ((s % (3600 * 24)) % 3600) % 60, ns);
+    }
+    else { // UNIX epoch
+        struct tm tm;
+        time_t t = s;
+        gmtime_s(&tm, &t);
+        SNPRINTF(str, l, "%u.%u.%u %02u:%02u:%02u +%" PRIu64 "ns", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour % 24, tm.tm_min, tm.tm_sec, ns);
+    }
 #endif
-    return s;
+    return str;
 }
+
+char* clockGetTimeString(char* str, uint32_t l, int64_t t) {
+
+#ifndef CLOCK_USE_UTC_TIME_NS
+    SNPRINTF(str, l, "%gs", (double)t/CLOCK_TICKS_PER_S);
+#else
+    char sign = '+';    if (t < 0) { sign = '-'; t = -t; }
+    uint64_t s = t / CLOCK_TICKS_PER_S;
+    uint64_t ns = t % CLOCK_TICKS_PER_S;
+    SNPRINTF(str, l, "%c%" PRIu64 "d%" PRIu64 "h%" PRIu64 "m%" PRIu64 "s+%" PRIu64 "ns", sign, s / (3600 * 24), (s % (3600 * 24)) / 3600, ((s % (3600 * 24)) % 3600) / 60, ((s % (3600 * 24)) % 3600) % 60, ns);
 #endif
+    return str;
+}
 
 #include <sys/timeb.h>
 
@@ -808,7 +799,11 @@ BOOL clockInit() {
     DBG_PRINT2("\nInit clock\n");
 #ifdef CLOCK_USE_UTC_TIME_NS
     DBG_PRINT2("  CLOCK_USE_UTC_TIME_NS\n");
+#else
+    DBG_PRINT2("  CLOCK_USE_APP_TIME_US\n");
 #endif
+    
+    sClock = 0;
 
     // Get current performance counter frequency
     // Determine conversion to CLOCK_TICKS_PER_S -> sDivide/sFactor
@@ -822,18 +817,17 @@ BOOL clockInit() {
         DBG_PRINT_ERROR("ERROR: Unexpected performance counter frequency!\n");
         return FALSE;
     }
-#ifndef CLOCK_USE_UTC_TIME_NS
-    sFactor = tF.u.LowPart / CLOCK_TICKS_PER_S;
-    sDivide = 1;
-#else
+#ifdef CLOCK_USE_UTC_TIME_NS
     if (CLOCK_TICKS_PER_S > tF.u.LowPart) {
-        sFactor = CLOCK_TICKS_PER_S / tF.u.LowPart;
-        sDivide = 0;
-    }
+      sFactor = CLOCK_TICKS_PER_S / tF.u.LowPart;
+      sDivide = 0;
+}
     else {
-        sFactor = tF.u.LowPart / CLOCK_TICKS_PER_S;
-        sDivide = 1;
+      sFactor = tF.u.LowPart / CLOCK_TICKS_PER_S;
+      sDivide = 1;
     }
+#else
+    sFactor = tF.u.LowPart / CLOCK_TICKS_PER_S;
 #endif
 
     // Get current performance counter to absolute time relation
@@ -844,44 +838,51 @@ BOOL clockInit() {
 
     // Get current UTC time in ms since 1.1.1970
     struct _timeb tstruct;
-    uint64_t t;
-    uint32_t t_ms;
+    uint64_t time_s;
+    uint32_t time_ms;
     _ftime(&tstruct);
-    t_ms = tstruct.millitm;
-    t = tstruct.time;
+    time_ms = tstruct.millitm;
+    time_s = tstruct.time;
     //_time64(&t); // s since 1.1.1970
 #endif
 
-    // Calculate factor and offset for clockGet64/32
+    // Calculate factor and offset
     QueryPerformanceCounter(&tC);
     tp = (((int64_t)tC.u.HighPart) << 32) | (int64_t)tC.u.LowPart;
-#ifndef CLOCK_USE_UTC_TIME_NS
-    // Reset clock now
-    sOffset = tp;
-#else
+#ifdef CLOCK_USE_UTC_TIME_NS
     // set  offset from local clock UTC value t
     // this is inaccurate up to 1 s, but irrelevant because system clock UTC offset is also not accurate
-    sOffset = t * CLOCK_TICKS_PER_S + (uint64_t)t_ms * CLOCK_TICKS_PER_MS - tp * sFactor;
+    sOffset = time_s * CLOCK_TICKS_PER_S + (uint64_t)time_ms * CLOCK_TICKS_PER_MS - tp * sFactor;
+#else
+    // Reset clock now
+    sOffset = tp;
 #endif
 
-    clockGet64();
+    clockGet();
 
 #ifdef ENABLE_DEBUG_PRINTS
     if (DBG_LEVEL >= 3) {
 #ifdef CLOCK_USE_UTC_TIME_NS
         if (DBG_LEVEL >= 4) {
             struct tm tm;
-            _gmtime64_s(&tm, (const __time64_t*)&t);
-            DBG_PRINTF2("  Current time = %I64uus + %ums\n", t, t_ms);
-            DBG_PRINTF2("  Zone difference in minutes from UTC: %d\n", tstruct.timezone);
-            DBG_PRINTF2("  Time zone: %s\n", _tzname[0]);
-            DBG_PRINTF2("  Daylight saving: %s\n", tstruct.dstflag ? "YES" : "NO");
-            DBG_PRINTF2("  UTC time = %" PRIu64 "s since 1.1.1970 ", t);
-            DBG_PRINTF2("  %u.%u.%u %u:%u:%u\n", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, (tm.tm_hour + 2) % 24, tm.tm_min, tm.tm_sec);
-        }
+            _gmtime64_s(&tm, (const __time64_t*)&time_s);
+            printf("    Current time = %I64uus + %ums\n", time_s, time_ms);
+            printf("    Zone difference in minutes from UTC: %d\n", tstruct.timezone);
+            printf("    Time zone: %s\n", _tzname[0]);
+            printf("    Daylight saving: %s\n", tstruct.dstflag ? "YES" : "NO");
+            printf("    UTC time = %" PRIu64 "s since 1.1.1970 ", time_s);
+            printf("    %u.%u.%u %u:%u:%u\n", tm.tm_mday, tm.tm_mon + 1, tm.tm_year + 1900, tm.tm_hour % 24, tm.tm_min, tm.tm_sec);
+        } 
+        printf("  System clock resolution = %" PRIu32 "Hz, UTC ns conversion = %c%" PRIu64 "+%" PRIu64 "\n", (uint32_t)tF.u.LowPart, sDivide ? '/' : '*', sFactor, sOffset);
+#else
+      printf("  System clock resolution = %" PRIu32 "Hz, ARB us conversion = -%" PRIu64 "/%" PRIu64 "\n", (uint32_t)tF.u.LowPart, sOffset, sFactor);
 #endif
-        DBG_PRINTF3("  Resolution = %u Hz, system resolution = %" PRIu32 " Hz, conversion = %c%" PRIu64 "+%" PRIu64 "\n", CLOCK_TICKS_PER_S, (uint32_t)tF.u.LowPart, sDivide ? '/' : '*', sFactor, sOffset);
-    } // Test
+        uint64_t t;
+        char ts[64];
+        t = clockGet();
+        clockGetString(ts, sizeof(ts), t);
+        printf("  Now = %I64u (%u per us) %s\n", t, CLOCK_TICKS_PER_US, ts);
+    } 
 #endif
 
     return TRUE;
@@ -889,13 +890,14 @@ BOOL clockInit() {
 
 
 // Clock 64 Bit (UTC or ARB) 
-uint64_t clockGet64() {
+uint64_t clockGet() {
 
     LARGE_INTEGER tp;
     uint64_t t;
 
     QueryPerformanceCounter(&tp);
     t = (((uint64_t)tp.u.HighPart) << 32) | (uint64_t)tp.u.LowPart;
+#ifdef CLOCK_USE_UTC_TIME_NS
     if (sDivide) {
         t = t / sFactor + sOffset;
     }
@@ -903,6 +905,10 @@ uint64_t clockGet64() {
         t = t * sFactor + sOffset;
     }
 
+#else
+    t = (t - sOffset) / sFactor;
+#endif
+    sClock = t;
     return t;
 }
 
