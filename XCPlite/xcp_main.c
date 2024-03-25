@@ -11,7 +11,7 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include "main.h"
+#include "xcp_main.h"
 #include "platform.h"
 #include "options.h"
 #include "util.h"
@@ -102,8 +102,9 @@ static void info(void) {
 #endif
 }
 
-int main(int argc, char* argv[]) {
+void *xcp_main(void *data) {
 
+    (void)data;
     info();
 
     // Initialize high resolution clock for measurement event timestamping
@@ -126,7 +127,7 @@ int main(int argc, char* argv[]) {
     extern char __data_start[];
     extern char _edata[];
     A2lCreate_MOD_PAR(ApplXcpGetAddr(__data_start), _edata - __data_start, &__data_start);
-    event = XcpCreateEvent("mainLoop", 20000, 0, 0, 0);
+    event = XcpCreateEvent("mainLoop", 2000000, 0, 0, 0);
 #ifdef __cplusplus // In C++, A2L objects datatype is detected at run time
     A2lCreateParameterWithLimits(ampl, "Amplitude of sinus signal in V", "V", 0, 800);
     A2lCreateParameterWithLimits(period, "Period of sinus signal in s", "s", 0, 10);
@@ -172,7 +173,6 @@ int main(int argc, char* argv[]) {
           XcpSendEvent(EVC_SESSION_TERMINATED, NULL, 0);
           break;
         }
-        
     }
             
     // Stop XCP

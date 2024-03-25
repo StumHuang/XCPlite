@@ -10,7 +10,7 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include "main.h"
+#include "xcp_main.h"
 #include "platform.h"
 #include "options.h"
 #include "util.h"

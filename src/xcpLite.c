@@ -58,7 +58,7 @@
 |  from Vector Informatik GmbH, please contact Vector
 |***************************************************************************/
 
-#include "main.h"
+#include "xcp_main.h"
 #include "platform.h"
 #include "util.h"
 #include "xcpLite.h"    // Protocol layer interface

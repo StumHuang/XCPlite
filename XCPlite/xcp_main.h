@@ -1,6 +1,6 @@
 #pragma once
 
-/* main.h */
+/* xcp_main.h */
 /*
 | Code released into public domain, no attribution required
 */
