@@ -11,10 +11,13 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include "main.h"
+#include "xcp_main.h"
 #include "platform.h"
 #include "xcpLite.h"
 #include "xcpEthServer.h"
+#if OPTION_ENABLE_DBG_PRINTS
+#include "dbg_print.h"
+#endif
 #if OPTION_ENABLE_A2L_GEN
 #include "A2L.h"
 #endif
@@ -43,7 +46,9 @@ uint32_t cycleTime = 10000; // us
 
 static BOOL checkKeyboard(void) { if (_kbhit()) { if (_getch()==27) {  return FALSE; } } return TRUE; }
 
-int main() {
+int *xcp_main(void *data) {
+
+    (void)data;
 
     printf("\nXCPlite - Simple Demo\n");
 
@@ -70,7 +75,10 @@ int main() {
     // Create ASAM A2L description file for measurement signals, calibration variables, events and communication parameters 
 #if OPTION_ENABLE_A2L_GEN
     if (!A2lOpen(OPTION_A2L_FILE_NAME, OPTION_A2L_NAME)) return 0;
-    event = XcpCreateEvent("mainLoop", 0, 0, 0, 0);
+    extern char __data_start[];
+    extern char _edata[];
+    A2lCreate_MOD_PAR(ApplXcpGetAddr(__data_start), _edata - __data_start, &__data_start);
+    event = XcpCreateEvent("mainLoop", 2000000, 0, 0, 0);
 #ifdef __cplusplus // In C++, A2L objects datatype is detected at run time
     A2lCreateParameterWithLimits(ampl, "Amplitude of sinus signal in V", "V", 0, 800);
     A2lCreateParameterWithLimits(period, "Period of sinus signal in s", "s", 0, 10);
@@ -85,6 +93,9 @@ int main() {
     A2lSetFixedEvent(event); // Associate to the variables created below
     A2lCreatePhysMeasurement(channel1, A2L_TYPE_DOUBLE, "Sinus demo signal", 1.0, 0.0, "V");
     A2lCreateMeasurement(counter, A2L_TYPE_UINT32, "Event counter");
+    #if OPTION_ENABLE_DBG_PRINTS
+    A2lCreateParameterWithLimits(gDebugLevel, A2L_TYPE_UINT32, "Debug Level", "emun", 0, 6);
+    #endif
 #endif
     A2lCreate_ETH_IF_DATA(OPTION_USE_TCP, ipAddr, OPTION_SERVER_PORT);
     A2lClose();

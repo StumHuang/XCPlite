@@ -29,7 +29,7 @@
 /*----------------------------------------------------------------------------*/
 /* Protocol features */
 
-// #define XCP_ENABLE_CAL_PAGE // Enable cal page switch, uses callbacks in xcpAppl.c !
+#define XCP_ENABLE_CAL_PAGE // Enable cal page switch, uses callbacks in xcpAppl.c !
 
 #define XCP_ENABLE_CHECKSUM // Enable checksum calculation command
 
@@ -45,13 +45,13 @@
 /*----------------------------------------------------------------------------*/
 /* DAQ features and parameters */
 
-// #define XCP_ENABLE_DAQ_EVENT_INFO // Enable XCP_GET_EVENT_INFO, if this is enabled, A2L file event information will be ignored
+#define XCP_ENABLE_DAQ_EVENT_INFO // Enable XCP_GET_EVENT_INFO, if this is enabled, A2L file event information will be ignored
 #define XCP_ENABLE_DAQ_EVENT_LIST // Enable event list
 #define XCP_MAX_EVENT 16 // Maximum number of events, size of event table
 // #define XCP_ENABLE_MULTITHREAD_EVENTS // Make XcpEvent thread safe for same event coming from different threads
 // #define XCP_ENABLE_PACKED_MODE // Enable packed mode 
 
-#define XCP_DAQ_MEM_SIZE (5*200) // Amount of memory for DAQ tables, each ODT entry (e.g. measurement variable) needs 5 bytes
+#define XCP_DAQ_MEM_SIZE (5*200*1000) // Amount of memory for DAQ tables, each ODT entry (e.g. measurement variable) needs 5 bytes
 
 #define XCP_DAQ_CLOCK_32BIT  // Use 32 Bit time stamps in GET_DAQ_CLOCK
 

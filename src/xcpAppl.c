@@ -373,16 +373,16 @@ uint8_t ApplXcpSetCalPage(uint8_t segment, uint8_t page, uint8_t mode) {
 // Not implemented
 
 uint8_t ApplXcpGetCalPage(uint8_t segment, uint8_t mode) {
-(void)segment;
 (void)mode;
-return CRC_PAGE_NOT_VALID;
+    if (segment > 0) return CRC_PAGE_NOT_VALID;
+    return 0;
 }
 
 uint8_t ApplXcpSetCalPage(uint8_t segment, uint8_t page, uint8_t mode) {
-  (void)segment;
-  (void)page;
-  (void)mode;
-  return CRC_PAGE_NOT_VALID;
+  if (segment > 0) return CRC_SEGMENT_NOT_VALID;
+    if (page > 1) return CRC_PAGE_NOT_VALID;
+    if ((mode & (CAL_PAGE_MODE_ECU | CAL_PAGE_MODE_XCP)) != (CAL_PAGE_MODE_ECU | CAL_PAGE_MODE_XCP)) return CRC_PAGE_MODE_NOT_VALID;
+    return 0;
 }
 
 #endif

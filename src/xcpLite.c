@@ -1158,11 +1158,11 @@ void XcpCommand( const uint32_t* cmdData, uint16_t cmdLen )
 #endif
             // if (event->size) CRM_GET_DAQ_EVENT_INFO_PROPERTIES |= DAQ_EVENT_PROPERTIES_EXT; @@@@ V1.6
             CRM_GET_DAQ_EVENT_INFO_MAX_DAQ_LIST = 0xFF;
-            CRM_GET_DAQ_EVENT_INFO_NAME_LENGTH = (uint8_t)strlen(event->name);
+            CRM_GET_DAQ_EVENT_INFO_NAME_LENGTH = (uint8_t)strlen(event->shortName);
             CRM_GET_DAQ_EVENT_INFO_TIME_CYCLE = event->timeCycle;
             CRM_GET_DAQ_EVENT_INFO_TIME_UNIT = event->timeUnit;
             CRM_GET_DAQ_EVENT_INFO_PRIORITY = event->priority;
-            gXcp.MtaPtr = (uint8_t*)event->name;
+            gXcp.MtaPtr = (uint8_t*)event->shortName;
             gXcp.MtaExt = 0;
           }
           break;
