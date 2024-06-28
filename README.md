@@ -3,39 +3,42 @@
 
 Copyright 2024 Vector Informatik GmbH
 
-Lightweight demo implementation of ASAM XCP V1.4 on Ethernet UDP or TCP for POSIX based or Windows Operating Systems.
-Provided to test and demonstrate calibration tools such as CANape, to showcase some capabilities of XCP and to serve as a base for individualy customized implementations.
+XCPlite is a lightweight demo implementation of the ASAM XCP V1.4 standard protocol for measurement and calibration of electronic control units. 
+The demo implementation uses Ethernet UDP or TCP communication on POSIX based or Windows Operating Systems. 
+XCPlite is provided to test and demonstrate calibration tools such as CANape or any other XCP client implementation. 
+It demonstrates some capabilities of XCP and may serve as a base for individually customized implementations. 
 
 New to XCP? Checkout Vector�s XCP Reference Book here: https://www.vector.com/int/en/know-how/protocols/xcp-measurement-and-calibration-protocol/xcp-book# or visit the Virtual VectorAcedemy for an E-Learning on XCP: https://elearning.vector.com/ 
 
-Supports Linux 32/64 Bit and Windows 32/64 Bit. 
+A list of restrictions compared to Vectors free XCPbasic or commercial XCPprof may be found in the source file xcpLite.c.
+XCPbasic is an implementation optimized for smaller Microcontrollers and CAN as Transport-Layer.
+XCPprof is a product in Vectors AUTOSAR MICROSAR and CANbedded product portfolio.   
 
-A List of restrictions compared to Vectors free xcpBasic and commercial xcpProf may be found in source file xcpLite.c.
-xcpBasic is an implementaion optimized for smaller Microcontrollers and CAN as Transport-Layer.
-xcpProf is a product in Vectors AUTOSAR and CANbedded product portfolio.   
+XCPlite
+- Supports TCP or UDP with jumbo frames. 
+- Is thread safe, has minimal thread lock and single copy data acquisition. 
+- Compiles as C or C++. 
+- Has no dependencies but includes some boilerplate code to abstract socket communication and clock
+- Achieves up to 100 MByte/s throughput on a Raspberry Pi 4. 
 
-Supports XCP on Ethernet, TCP or UDP with jumbo frames. 
-Thread safe, minimal thread lock and zero copy data acquisition. 
-C and C++ support. 
-
-Achieves up to 100 MByte/s throughput on a Raspberry Pi 4 (with jumbo frames enabled). 
-
-XCPlite has been testet on CANFD, but there is no example target to showcase this.
+XCPlite has been testet on CANFD, there is some experimental code included, but there is no example target to showcase this.
 XCPlite is not recomended for CAN.
 
 No manual A2L creation (ASAP2 ECU description) is required for XCPlite. 
-An A2L with a reduced featureset is generated through code instrumentation during runtime and may be automatically uploaded by XCP. 
+An A2L with a reduced featureset may be generated through code instrumentation during runtime and can be automatically uploaded by XCP. 
 
 
 ## Included code examples (Build Targets):  
 
 XCPlite:
-  Getting started with a simple demo in C with minimum code and features. Shows the basics how to integrate XCP in existing applications. Compiles as C.
+  Getting started with a simple demo in C with minimum code and features. Shows the basics how to integrate XCP in existing applications. Compiles as C. 
+
 C_DEMO:
-  Shows more sophisticated calibration, maps and curves, calibration page switching and EPK check. Compiles as C or C++.
+  Shows more sophisticated calibration, maps and curves, calibration page switching and EPK check. Compiles as C or C++. 
+
 CPP_Demo:
   XCP server as a C++ singleton. Demonstrates an approach how to calibrate and measure members of dynamic instances of classes. 
-
+  
 
 ## Code instrumentation for measurement events:
 
@@ -45,7 +48,7 @@ Example:
 
 ### Definition:
 
-Define a variable which should be acquired and visualized in realtime by the measurement and calibration tool
+Define a global variable which should be acquired and visualized in realtime by the measurement and calibration tool
 
 ```
   double channel1; 
@@ -53,7 +56,7 @@ Define a variable which should be acquired and visualized in realtime by the mea
 
 ### A2L generation:
 
-A2L is ASCII file format standardized by ASAM to describe ECU internal measurement and calibration values.
+A2L is an ASCII file format (ASAM standard) to describe ECU internal measurement and calibration values.
 With XCPlite, the A2L file may be generated during runtime at startup of the application:
 
 ```
@@ -65,7 +68,7 @@ With XCPlite, the A2L file may be generated during runtime at startup of the app
 
 ### Measurement data acquisition event:
 
-A measurement event is trigger for measurement data acquisition somewhere in the code. Multiples measurement objects such as channel1, even complexer objects like structs and instances can be associated to the event. This is done during runtime in the GUI of the measurement and calibration tool. An event will be precicly timestamped with ns resolution, timestamps may obtained from PTP synchronized clocks and the data attached to it, is garantueed to be consistent. The blocking duration of the XcpEvent function is as low as possible:
+A measurement event is a trigger for measurement data acquisition somewhere in the code. Multiples measurement objects such as channel1, even complexer objects like structs and instances can be associated to the event. This is done during runtime in the GUI of the measurement and calibration tool. An event will be precicly timestamped with ns resolution, timestamps may obtained from PTP synchronized clocks and the data attached to it, is garantueed to be consistent. The blocking duration of the XcpEvent function is as low as possible:
 
 ```
   channel1 += 0.6;
@@ -88,15 +91,28 @@ Compile options for the different demo targets are located in main_cfg.h.
 
 - Specify the IP addr to bind (in main_cfg.h or on the command line (-bind)), if there are multiple Ethernet adapters. Otherwise the IP address of the Ethernet adapter found first, will be written to A2L file. 
 
-- If A2L generation and upload is disabled, make sure CANape (or any other tool) is using an up to date A2L file with correct memory addresses and data types.  The A2L from ELF updater in CANape may be activated to achieve this. Be aware that XCP uses direct memory access, wrong addresses may lead to access fault or even worse to corrupt data. You may want to enable EPK check, to make sure the A2L description matches the ECU software.
+- If A2L generation and upload is disabled, make sure CANape (or any other tool) is using an up to date A2L file with correct memory addresses and data types.  
+The A2L from ELF updater in CANape may be activated to achieve this.  
+Be aware that XCP uses direct memory access, wrong addresses may lead to access fault or even worse to corrupt data.  
+You may want to enable EPK check, to make sure the A2L description matches the ECU software.  
+When using MS Visual Studio, generate Debug Information optimized for sharing and publishing (/DEBUG:FULL)
 
-- If A2L upload is enabled, you may need to set the IP address manually once. When connect is refused in CANape, press the flashing update icon in the statusbar.
+- If A2L upload is enabled, you may need to set the IP address manually once. 
+When connect is refused in CANape, press the flashing update icon in the statusbar.
 
 - For the A2L Updater or CANapes automatic A2L address update, use Linker Map Type ELF extended for Linux a.out format or PDB for Microsoft .exe
 
-- 64 bit builds needs all objects located within one 4 GByte data segment. Note that XCP addresses are 32 Bit plus 8 Bit extension. The conversion methods from pointer to A2l/XCP address and vice versa, are in xcpAppl.c and maybe changed for specific needs. xcpLite.c does not make assumptions on addresses. The only exception is during measurement, where XcpEvent creates pointers by adding the XCP/A2L address to ApplXcpGetBaseAddr(). To save space, the 32 Bit addresses, not 64 Bit pointers are stored in the DAQ lists. During measurement setup, ApplXcpGetPointer is called once to check for validity of the XCP/A2L address conversion. 
+- 64 bit builds needs all objects located within one 4 GByte data segment. 
+Note that XCP addresses are 32 Bit plus 8 Bit extension. 
+The conversion methods from pointer to A2l/XCP address and vice versa, are in xcpAppl.c and maybe changed for specific needs. xcpLite.c does not make assumptions on addresses. 
+The only exception is during measurement, where XcpEvent creates pointers by adding the XCP/A2L address to ApplXcpGetBaseAddr(). 
+To save space, the 32 Bit addresses, not 64 Bit pointers are stored in the DAQ lists. 
+During measurement setup, ApplXcpGetPointer is called once to check for validity of the XCP/A2L address conversion. 
   
-- Multicast time synchronisation (GET_DAQ_CLOCK_MULTICAST) is enabled in CANape by default. When measurement does not start, it is most probably a problem with multicast reception. Multicast provides no benefit with single clients or with PTP time synchronized clients and is therefore just unnessesary effort. Turn Multicast off in device/protocol/event/TIME_CORRELATION_GETDAQCLOCK by changing the option from "multicast" to "extended response"
+- Multicast time synchronisation (GET_DAQ_CLOCK_MULTICAST) is enabled in CANape by default. 
+When measurement does not start, it is most probably a problem with multicast reception. 
+Multicast provides no benefit with single clients or with PTP time synchronized clients and is therefore just unnessesary effort. 
+Turn Multicast off in device/protocol/event/TIME_CORRELATION_GETDAQCLOCK by changing the option from "multicast" to "extended response"
 
 
 
@@ -130,20 +146,26 @@ Version 4.x:
 
 ### Linux or macOS
 
-$ sudo apt-get install cmake g++ clang ninja-build
-or
-$ brew install cmake gcc 
+#### Install development tooling
+for Linux:
+``` sh
+sudo apt-get install cmake g++ clang ninja-build
+```
+for MacOS
+``` sh
+brew install cmake gcc 
+```
 
 #### Build
 
 Edit CMakeLists.txt: set(WINDOWS FALSE), set(MACOS FALSE)
 
-```
-$ cd <targetDirectory> (XCPlite or CPP_Demo or C_DEMO)
-$ cmake -DCMAKE_BUILD_TYPE=Release -S . -B build  
-$ cd build
-$ make
-$ ./<targetName>.out (XCPlite or CPP_Demo or C_DEMO)
+``` sh
+cd <targetDirectory> (XCPlite or CPP_Demo or C_DEMO)
+cmake -DCMAKE_BUILD_TYPE=Release -S . -B build  
+cd build
+make
+./<targetName>.out (XCPlite or CPP_Demo or C_DEMO)
 
 ```
 
@@ -153,26 +175,23 @@ $ ./<targetName>.out (XCPlite or CPP_Demo or C_DEMO)
 Use the Visual Studio 19 projects included in the repo or build projects with CMake.
 
 #### Build Visual Studio project and solution
-```
+
 Start cmake-gui
 Start the generated VS solution
-```
 
 #### Build on Windows command line
 
-```
 For the CMake setup, prepare your command line environment.
 Set compiler to Microsoft x64 cl.exe and make sure the system finds cmake and ninja or make.
 You can also use the Windows clang compiler.
 
+``` bat
+call "C:\Program Files (x86)\Microsoft Visual Studio 15.0\VC\Auxiliary\Build\vcvars64.bat"
+set PATH=C:\Tools\ninja;%PATH%
+set PATH=C:\Tools\cmake_3.17.2.0\bin;%PATH%
+cd XCPlite
+mkdir build_release
+cd build_release
+cmake -GNinja -DCMAKE_BUILD_TYPE=Release ../C_Demo
+ninja
 ```
-> call "C:\Program Files (x86)\Microsoft Visual Studio 15.0\VC\Auxiliary\Build\vcvars64.bat"
-> set PATH=C:\Tools\ninja;%PATH%
-> set PATH=C:\Tools\cmake_3.17.2.0\bin;%PATH%
-> cd XCPlite
-> mkdir build_release
-> cd build_release
-> cmake -GNinja -DCMAKE_BUILD_TYPE=Release ../C_Demo
-> ninja
-```
-

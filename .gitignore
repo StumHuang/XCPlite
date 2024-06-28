@@ -1,19 +1,18 @@
 
-*.DS_Store
-
-XCPlite/Xcode_build/
+# build
 XCPlite/build/
-
-build/
+C_Demo/build/
+CPP_Demo/build/
 build_XCPlite/
 build_C_Demo/
 build_CPP_Demo/
+build/
 bin/
 obj/
 *.[oa]
 
 
-# Visual Studio specific files and folders
+# Visual Studio 
 .vs/
 *.suo
 *.sdf
@@ -37,16 +36,20 @@ obj/
 *.log
 *.vcxproj.FileListAbsolute.txt
 
+# Xcode
+*.DS_Store
+Xcode_build/
+/XCPlite.xcodeproj/xcuserdata/
+/XCPlite.xcodeproj/project.xcworkspace/
+
 
 # CANape specific
 *.pcap
 *.mdf
 *.mf4
-*.a2L
 *.HEX
 *.par
 *.cnaxml
 Environment
 CustomProperties.json
-*.xcbkptlist
-/XCPlite/XCPlite.xcodeproj/project.xcworkspace/xcuserdata/rainer.xcuserdatad/Bookmarks/bookmarks.plist
+

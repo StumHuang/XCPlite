@@ -84,5 +84,12 @@
 
 #endif
 
+#ifdef __cplusplus
+#include <typeinfo>
+#include <thread>
+#include <string>
+#include <vector>
+#endif
+
 #include "main_cfg.h"
 

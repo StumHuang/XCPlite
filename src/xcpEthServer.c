@@ -12,9 +12,9 @@
 |
 -----------------------------------------------------------------------------*/
 
-#include "xcp_main.h"
+#include "main.h"
 #include "platform.h"
-#include "util.h"
+#include "dbg_print.h"
 #include "xcpLite.h"   
 #include "xcpEthServer.h"
 
@@ -31,16 +31,6 @@ static void* XcpServerTransmitThread(void* par);
 #endif
 
 
-#ifdef VECTOR_INTERNAL  // >>>>>>>>>>>>>>>>>>>>>>>>>>>
-#if OPTION_ENABLE_CDC
-#if defined(_WIN) // Windows
-static DWORD WINAPI XcpServerCDCThread(LPVOID lpParameter);
-#elif defined(_LINUX) // Linux
-static void* XcpServerCDCThread(void* par);
-#endif
-#endif
-#endif // VECTOR_INTERNAL <<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
 static struct {
 
     BOOL isInit; 
@@ -50,13 +40,6 @@ static struct {
     volatile int TransmitThreadRunning;
     tXcpThread CMDThreadHandle;
     volatile int ReceiveThreadRunning;
-
-#ifdef VECTOR_INTERNAL  // >>>>>>>>>>>>>>>>>>>>>>>>>>>
-#if OPTION_ENABLE_CDC
-    tXcpThread CDCThreadHandle;
-    volatile int CDCThreadRunning;
-#endif
-#endif // VECTOR_INTERNAL <<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 } gXcpServer;
 
@@ -73,7 +56,7 @@ BOOL XcpEthServerInit(const uint8_t* addr, uint16_t port, BOOL useTCP, uint16_t 
     int r = 0;
 
     if (gXcpServer.isInit) return FALSE;
-    XCP_DBG_PRINT1("\nStart XCP server\n");
+    DBG_PRINT1("\nStart XCP server\n");
 
     gXcpServer.TransmitThreadRunning = 0;
     gXcpServer.ReceiveThreadRunning = 0;
@@ -88,17 +71,6 @@ BOOL XcpEthServerInit(const uint8_t* addr, uint16_t port, BOOL useTCP, uint16_t 
     // Start XCP protocol layer
     XcpStart();
 
-    // Intitialize CDC
-#ifdef VECTOR_INTERNAL  // >>>>>>>>>>>>>>>>>>>>>>>>>>>
-#if OPTION_ENABLE_CDC
-    if (serverCDCPort > 0) {
-        r = udpCdcInit(serverAddr, serverCDCPort, mtu);
-        if (!r) return 0;
-        create_thread(&gCDCThreadHandle, XcpServerCDCThread);
-    }
-#endif
-#endif // VECTOR_INTERNAL <<<<<<<<<<<<<<<<<<<<<<<<<<<<
-
     // Create threads
     create_thread(&gXcpServer.DAQThreadHandle, XcpServerTransmitThread);
     create_thread(&gXcpServer.CMDThreadHandle, XcpServerReceiveThread);
@@ -110,6 +82,7 @@ BOOL XcpEthServerInit(const uint8_t* addr, uint16_t port, BOOL useTCP, uint16_t 
 BOOL XcpEthServerShutdown() {
 
     if (gXcpServer.isInit) {
+
         XcpDisconnect();
         cancel_thread(gXcpServer.DAQThreadHandle);
         cancel_thread(gXcpServer.CMDThreadHandle);
@@ -129,7 +102,7 @@ extern void* XcpServerReceiveThread(void* par)
 #endif
 {
     (void)par;
-    XCP_DBG_PRINT3("Start XCP CMD thread\n");
+    DBG_PRINT3("Start XCP CMD thread\n");
 
     // Receive XCP unicast commands loop
     gXcpServer.ReceiveThreadRunning = 1;
@@ -140,8 +113,8 @@ extern void* XcpServerReceiveThread(void* par)
     }
     gXcpServer.ReceiveThreadRunning = 0;
 
-    XCP_DBG_PRINT_ERROR("ERROR: XcpTlHandleCommands failed!\n");
-    XCP_DBG_PRINT_ERROR("ERROR: XcpServerReceiveThread terminated!\n");
+    DBG_PRINT_ERROR("ERROR: XcpTlHandleCommands failed!\n");
+    DBG_PRINT_ERROR("ERROR: XcpServerReceiveThread terminated!\n");
     return 0;
 }
 
@@ -156,7 +129,7 @@ extern void* XcpServerTransmitThread(void* par)
     (void)par;
     int32_t n;
 
-    XCP_DBG_PRINT3("Start XCP DAQ thread\n");
+    DBG_PRINT3("Start XCP DAQ thread\n");
 
     // Transmit loop
     gXcpServer.TransmitThreadRunning = 1;
@@ -168,47 +141,14 @@ extern void* XcpServerTransmitThread(void* par)
         // Transmit all completed UDP packets from the transmit queue
         n = XcpTlHandleTransmitQueue();
         if (n<0) {
-          XCP_DBG_PRINT_ERROR("ERROR: XcpTlHandleTransmitQueue failed!\n");
+          DBG_PRINT_ERROR("ERROR: XcpTlHandleTransmitQueue failed!\n");
           break; // error - terminate thread
         }
 
     } // for (;;)
     gXcpServer.TransmitThreadRunning = 0;
 
-    XCP_DBG_PRINT_ERROR("XCP DAQ thread terminated!\n");
+    DBG_PRINT_ERROR("XCP DAQ thread terminated!\n");
     return 0;
 }
 
-
-#ifdef VECTOR_INTERNAL  // >>>>>>>>>>>>>>>>>>>>>>>>>>>
-#if OPTION_ENABLE_CDC
-
-// XCP transport layer thread
-// Handle commands
-#if defined(_WIN) // Windows
-DWORD WINAPI XcpServerCDCThread(LPVOID lpParameter)
-#elif defined(_LINUX) // Linux
-extern void* XcpServerCDCThread(void* par)
-#endif
-{
-    gXcpServer.XcpServerCDCThreadRunning = 1;
-    XCP_DBG_PRINT3("Start CDC server thread\n");
-
-    // Server loop
-    for (;;) {
-
-        // Handle incoming XCP commands
-        if (!udpCdcReceiveAndHandleCommands()) { // in blocking mode
-            XCP_DBG_PRINT_ERROR("ERROR: udpCdcHandleCommands failed, shutdown and restart\n"); // Error
-            XcpServerShutdown();
-            xcpServerRestart();
-        }
-
-    } // for (;;)
-
-    gXcpServer.XcpServerCDCThreadRunning = 0;
-    return 0;
-}
-
-#endif
-#endif // VECTOR_INTERNAL <<<<<<<<<<<<<<<<<<<<<<<<<<<<

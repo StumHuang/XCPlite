@@ -12,7 +12,7 @@
 |
 -----------------------------------------------------------------------------*/
 
-#include "xcp_main.h"
+#include "main.h"
 #include "platform.h"
 #include "util.h"
 #include "xcpLite.h"   

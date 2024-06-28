@@ -10,10 +10,9 @@
 |
  ----------------------------------------------------------------------------*/
 
-#include "xcp_main.h"
+#include "main.h"
 #include "platform.h"
-#include "options.h"
-#include "util.h"
+#include "dbg_print.h"
 #include "xcpLite.h"
 #include "A2L.h"
 
@@ -27,6 +26,20 @@ static uint32_t gA2lTypedefs;
 static uint32_t gA2lComponents;
 static uint32_t gA2lInstances;
 static uint32_t gA2lConversions;
+
+
+//----------------------------------------------------------------------------------
+// Check for memory accessibility
+//#define A2L_ENABLE_MEMORY_CHECK
+#ifdef A2L_ENABLE_MEMORY_CHECK
+static void mem_check(const char* name, int32_t type, uint8_t ext, uint32_t addr) {
+	(void)type; (void)name;
+	volatile uint8_t *p = ApplXcpGetPointer(ext,addr);
+	if (p==NULL) { DBG_PRINTF1("ERROR: memory address 0x%04X of variable %s not accessible !\n",addr,name); assert(0); }
+    volatile uint8_t b = *p; // if this leads to a memory protection error, check if address transformation from A2L to uint_8_p* transformation is correct 
+}
+#endif	
+
 
 //----------------------------------------------------------------------------------
 static const char* gA2lHeader =
@@ -49,7 +62,6 @@ static const char* gA2lHeader =
 "\n";
 
 //----------------------------------------------------------------------------------
-#if OPTION_ENABLE_CAL_SEGMENT
 static const char* gA2lMemorySegment =
 "/begin MEMORY_SEGMENT\n"
 "CALRAM \"\" DATA FLASH INTERN 0x%08X 0x%08X -1 -1 -1 -1 -1\n" // CALRAM_START, CALRAM_SIZE
@@ -61,7 +73,6 @@ static const char* gA2lMemorySegment =
 "/end SEGMENT\n"
 "/end IF_DATA\n"
 "/end MEMORY_SEGMENT\n";
-#endif
 
 //----------------------------------------------------------------------------------
 static const char* const gA2lIfDataBegin =
@@ -173,7 +184,7 @@ static const char* gA2lIfDataEth = // Parameter: %s TCP or UDP, %04X tl version,
 ;
 
 //----------------------------------------------------------------------------------
-// XCP_ON_CAN
+// XCP_ON_CAN (CAN_FD not implemented yet)
 static const char* gA2lIfDataCan = // Parameter: TRANSPORT_LAYER_VERSION, CRO_ID, DTO_ID, BITRATE
 "/begin XCP_ON_CAN\n" // Transport Layer
 "  0x%04X\n"
@@ -186,39 +197,6 @@ static const char* gA2lIfDataCan = // Parameter: TRANSPORT_LAYER_VERSION, CRO_ID
 "  SJW 0x02\n"
 "  SYNC_EDGE SINGLE\n"
 "/end XCP_ON_CAN\n";
-
-
-
-#if 0
-
-block "CAN_FD" struct {                    /* The CAN_FD block definition indicates the use of CAN-FD frames */
-taggedstruct{
-
-	"MAX_DLC" uint;                        /* 8, 12, 16, 20, 24, 32, 48 or 64 */
-	"CAN_FD_DATA_TRANSFER_BAUDRATE" ulong; /* BAUDRATE [Hz] */
-	"SAMPLE_POINT" uchar;                  /* sample point receiver */
-																				 /* [% complete bit time] */
-	"BTL_CYCLES" uchar;                    /* BTL_CYCLES */
-																				 /* [slots per bit time] */
-	"SJW" uchar;                           /* length synchr. segment */
-																				 /* [BTL_CYCLES] */
-	"SYNC_EDGE" enum {
-		"SINGLE" = 1,                        /* on falling edge only */
-		"DUAL" = 2                         /* on falling and rising edge */
-	};
-	"MAX_DLC_REQUIRED";                    /* master to slave frames */
-																				 /* always to have DLC = MAX_DLC_for CAN-FD */
-	"SECONDARY_SAMPLE_POINT" uchar;        /* sender sample point */
-																				 /* [% complete bit time] */
-	"TRANSCEIVER_DELAY_COMPENSATION" enum {
-		"OFF" = 0,
-		"ON" = 1
-	};
-			};
-		};
-
-
-#endif
 
 
 //----------------------------------------------------------------------------------
@@ -237,7 +215,6 @@ static const char* const gA2lFooter =
 #define printAddrExt(ext) if (ext>0) fprintf(gA2lFile, " ECU_ADDRESS_EXTENSION %u",ext);
 
 const char* A2lGetSymbolName(const char* instanceName, const char* name) {
-
 	static char s[256];
 	if (instanceName != NULL && strlen(instanceName) > 0) {
 		SNPRINTF(s, 256, "%s.%s", instanceName, name);
@@ -323,7 +300,6 @@ static const char* getPhysMax(int32_t type, double factor, double offset) {
 	case A2L_TYPE_UINT32: value = 4294967295; break;
 	default:                value = 1E12;
 	}
-
 	static char str[20];
 	snprintf(str, 20, "%f", factor * value + offset);
 	return str;
@@ -360,7 +336,6 @@ BOOL A2lOpen(const char *filename, const char* projectName ) {
 }
 
 // Memory segments
-#if OPTION_ENABLE_CAL_SEGMENT
 void A2lCreate_MOD_PAR(uint32_t startAddr, uint32_t size, char *epk) {
 
 	assert(gA2lFile != NULL);
@@ -370,9 +345,10 @@ void A2lCreate_MOD_PAR(uint32_t startAddr, uint32_t size, char *epk) {
 	fprintf(gA2lFile, gA2lMemorySegment, startAddr, size);
 	DBG_PRINTF1("  A2L MOD_PAR MEMORY_SEGMENT 1: 0x%08X %u\n", startAddr, size);
 	fprintf(gA2lFile, "/end MOD_PAR\n\n");
+#if OPTION_ENABLE_DBG_PRINTS
 	if (epk) DBG_PRINTF1("  A2L MOD_PAR EPK \"%s\" 0x%08X\n", epk, ApplXcpGetAddr((uint8_t*)epk));
-}
 #endif
+}
 
 
 static void A2lCreate_IF_DATA_DAQ() {
@@ -403,12 +379,7 @@ static void A2lCreate_IF_DATA_DAQ() {
 #if defined( XCP_ENABLE_DAQ_EVENT_LIST ) && !defined( XCP_ENABLE_DAQ_EVENT_INFO )
 	for (uint32_t i = 0; i < eventCount; i++) {
 
-		// Shortened name
-		char shortName[9];
-		strncpy(shortName, eventList[i].name, 8);
-		shortName[8] = 0;
-
-		fprintf(gA2lFile, "/begin EVENT \"%s\" \"%s\" 0x%X DAQ 0xFF %u %u %u CONSISTENCY EVENT", eventList[i].name, shortName, i, eventList[i].timeCycle, eventList[i].timeUnit, eventList[i].priority);
+		fprintf(gA2lFile, "/begin EVENT \"%s\" \"%s\" 0x%X DAQ 0xFF %u %u %u CONSISTENCY EVENT", eventList[i].shortName, eventList[i].shortName, i, eventList[i].timeCycle, eventList[i].timeUnit, eventList[i].priority);
 #ifdef XCP_ENABLE_PACKED_MODE
 		if (eventList[i].sampleCount != 0) {
 			fprintf(gA2lFile, " /begin DAQ_PACKED_MODE ELEMENT_GROUPED STS_LAST MANDATORY %u /end DAQ_PACKED_MODE", eventList[i].sampleCount);
@@ -463,7 +434,7 @@ void A2lCreate_CAN_IF_DATA(BOOL useCANFD, uint16_t croId, uint16_t dtoId, uint32
 
 	// Transport Layer info
 	uint32_t _croId = croId;
-	uint32_t _dtoId = croId;
+	uint32_t _dtoId = dtoId;
 	if (useCANFD) {
 		_croId |= 0x40000000;
 		_dtoId |= 0x40000000;
@@ -564,9 +535,12 @@ void A2lCreateTypedefInstance_(const char* instanceName, const char* typeName, u
 }
 
 
-void A2lCreateMeasurement_(const char* instanceName, const char* name, int32_t type, uint8_t ext, uint32_t addr, double factor, double offset, const char* unit, const char* comment, BOOL symbolLink) {
+void A2lCreateMeasurement_(const char* instanceName, const char* name, int32_t type, uint8_t ext, uint32_t addr, double factor, double offset, const char* unit, const char* comment) {
 	
 	assert(gA2lFile != NULL);
+#ifdef A2L_ENABLE_MEMORY_CHECK
+	mem_check(name, type, ext, addr);
+#endif	
 	if (unit == NULL) unit = "";
 	if (comment == NULL) comment = "";
 	const char *conv = "NO";
@@ -582,7 +556,7 @@ void A2lCreateMeasurement_(const char* instanceName, const char* name, int32_t t
 	printPhysUnit(unit);
 	fprintf(gA2lFile, " READ_WRITE");
 #if OPTION_ENABLE_A2L_SYMBOL_LINKS
-	if (symbolLink) fprintf(gA2lFile, " SYMBOL_LINK \"%s\" %u", A2lGetSymbolName(instanceName, name), 0);
+	fprintf(gA2lFile, " SYMBOL_LINK \"%s\" %u", A2lGetSymbolName(instanceName, name), 0);
 #else
 	(void)symbolLink;
 #endif

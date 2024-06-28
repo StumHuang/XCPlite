@@ -1,26 +1,17 @@
 #pragma once
 
-/* util.h */
+/* dbg_print.h */
 /*
 | Code released into public domain, no attribution required
 */
 
 
-
-
-//-------------------------------------------------------------------------------
-// Load a file to memory
-
-uint8_t* loadFile(const char* filename, uint32_t* length);
-void releaseFile(uint8_t* file);
-
-
 //-------------------------------------------------------------------------------
 // Debug print
 
-#if 1
-#define ENABLE_DEBUG_PRINTS
+#if OPTION_ENABLE_DBG_PRINTS
 
+extern unsigned int gDebugLevel;
 #define DBG_LEVEL gDebugLevel
 
 #define DBG_PRINTF_ERROR(format, ...) printf(format, __VA_ARGS__)
@@ -39,19 +30,21 @@ void releaseFile(uint8_t* file);
 
 #else
 
-#define DBG_LEVEL 0
+#undef DBG_LEVEL
 
 #define DBG_PRINTF_ERROR(s, ...) // printf(s,__VA_ARGS__)
 #define DBG_PRINTF(level, s, ...) 
 #define DBG_PRINTF1(s, ...) 
 #define DBG_PRINTF2(s, ...) 
 #define DBG_PRINTF3(s, ...) 
+#define DBG_PRINTF4(s, ...) 
 
 #define DBG_PRINT_ERROR(s, ...) // printf(s,__VA_ARGS__)
 #define DBG_PRINT(level, s, ...) 
 #define DBG_PRINT1(s, ...) 
 #define DBG_PRINT2(s, ...) 
 #define DBG_PRINT3(s, ...) 
+#define DBG_PRINT4(s, ...) 
 
 #endif
 

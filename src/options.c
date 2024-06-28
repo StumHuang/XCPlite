@@ -8,9 +8,10 @@
 |   Code released into public domain, no attribution required
  ----------------------------------------------------------------------------*/
 
-#include "xcp_main.h"
-#include "options.h"
+#include "main.h"
 #include "platform.h"
+#include "dbg_print.h"
+#include "options.h"
 
 
 //-----------------------------------------------------------------------------------------------------
@@ -18,13 +19,13 @@
 
 // Commandline Options and Defaults
 
-uint32_t gDebugLevel = OPTION_DEBUG_LEVEL;
-
 #if OPTION_ENABLE_TCP
 BOOL gOptionUseTCP = OPTION_USE_TCP;
 #endif
 uint16_t gOptionPort = OPTION_SERVER_PORT;
 uint8_t gOptionBindAddr[4] = OPTION_SERVER_ADDR;
+
+
 
 
 //-----------------------------------------------------------------------------------------------------
@@ -69,13 +70,16 @@ BOOL cmdline_parser(int argc, char* argv[]) {
             cmdline_usage(argv[0]);
             return FALSE;
         }
+#if OPTION_ENABLE_DBG_PRINTS
         else if (strcmp(argv[i], "-log") == 0) {
           if (++i < argc) {
+            extern unsigned int gDebugLevel;
             if (sscanf(argv[i], "%u", &gDebugLevel) == 1) {
               printf("Debug output level = %u\n", gDebugLevel);
             }
           }
         }
+#endif
         else if (strcmp(argv[i], "-bind") == 0) {
             if (++i < argc) {
                 if (inet_pton(AF_INET, argv[i], &gOptionBindAddr)) {
